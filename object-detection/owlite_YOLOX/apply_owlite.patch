@@ -1,0 +1,967 @@
+diff --git a/tools/eval.py b/tools/eval.py
+index 83ad76b..7bb9bfe 100644
+--- a/tools/eval.py
++++ b/tools/eval.py
+@@ -22,13 +22,60 @@ from yolox.utils import (
+     get_model_info,
+     setup_logger
+ )
+-
++from yolox.data import DataPrefetcher
++import owlite #import owlite
+ 
+ def make_parser():
+     parser = argparse.ArgumentParser("YOLOX Eval")
+     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
+     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
+ 
++    # Add OwLite arguments
++    subparsers = parser.add_subparsers(required=True)
++    owlite_parser = subparsers.add_parser("owlite", help="OwLite arguments")
++    owlite_parser.add_argument(
++        "--project",
++        type=str,
++        required=True,
++        dest="owlite_project",
++        help="OwLite project name"
++    )
++    owlite_parser.add_argument(
++        "--baseline",
++        type=str,
++        required=True,
++        dest="owlite_baseline",
++        help="OwLite baseline name"
++    )
++    owlite_parser.add_argument(
++        "--experiment",
++        type=str,
++        default=None,
++        dest="owlite_experiment",
++        help="OwLite experiment name"
++    )
++    owlite_parser.add_argument(
++        '--duplicate-from', 
++        type=str,
++        default=None,
++        dest="owlite_duplicate_from",
++        help="The name of OwLite experiment "
++            "where the config to be duplicated is located"
++    )
++    owlite_parser.add_argument(
++        '--ptq',
++        action="store_true",
++        dest="owlite_ptq",
++        help="True if OwLite PTQ is applied"
++    )
++    owlite_parser.add_argument(
++        '--calib-num',
++        type=int,
++        default=128,
++        dest="owlite_calib_num",
++        help="Number of data to use for OwLite calibration"
++    )
++
+     # distributed
+     parser.add_argument(
+         "--dist-backend", default="nccl", type=str, help="distributed backend"
+@@ -188,14 +235,50 @@ def main(exp, args, num_gpu):
+     else:
+         trt_file = None
+         decoder = None
++ 
++    # init OwLite
++    owl = owlite.init(
++        project=args.owlite_project,
++        baseline=args.owlite_baseline,
++        experiment=args.owlite_experiment,
++        duplicate_from=args.owlite_duplicate_from
++    )
++    model.eval()
++    model.head.decode_in_inference = False
++    strides = model.head.strides
++    # run OwLite convert
++    with torch.no_grad():
++        dummy_input = torch.randn(args.batch_size, 3, *exp.input_size)
++        model = owl.convert(model, dummy_input)
+ 
++    if args.owlite_ptq:
++        # generate train dataloader for PTQ calibration
++        train_loader = exp.get_data_loader(
++            batch_size=args.batch_size,
++            is_distributed=False,
++            no_aug=True,
++            cache_img=None
++        )
++        prefetcher = DataPrefetcher(train_loader)
++        # calibrate the model with OwLite
++        with owlite.calibrate(model) as calibrate_model:
++            for idx in range(args.owlite_calib_num // args.batch_size):
++                inps, _  = prefetcher.next()
++                calibrate_model(inps)
++                if (idx + 1) * args.batch_size >= args.owlite_calib_num:
++                    break
++    
++    # benchmark the model using OwLite
++    owl.benchmark(model)
+     # start evaluate
+-    *_, summary = evaluator.evaluate(
+-        model, is_distributed, args.fp16, trt_file, decoder, exp.test_size
++    ap50_95, _, summary = evaluator.evaluate(
++        model, is_distributed, args.fp16, trt_file, decoder, exp.test_size,
++        is_decoding_in_model = False, strides=strides,
+     )
++    # log ap50_95 to OwLite
++    owl.log(ap50_95=ap50_95)
+     logger.info("\n" + summary)
+ 
+-
+ if __name__ == "__main__":
+     configure_module()
+     args = make_parser().parse_args()
+diff --git a/tools/train.py b/tools/train.py
+index d57f420..7fff688 100644
+--- a/tools/train.py
++++ b/tools/train.py
+@@ -19,6 +19,53 @@ def make_parser():
+     parser = argparse.ArgumentParser("YOLOX train parser")
+     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
+     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
++    
++    
++    # Add OwLite arguments
++    subparsers = parser.add_subparsers(required=True)
++    owlite_parser = subparsers.add_parser("owlite", help="OwLite arguments")
++    owlite_parser.add_argument(
++        "--project",
++        type=str,
++        required=True,
++        dest="owlite_project",
++        help="OwLite project name"
++    )
++    owlite_parser.add_argument(
++        "--baseline",
++        type=str,
++        required=True,
++        dest="owlite_baseline",
++        help="OwLite baseline name"
++    )
++    owlite_parser.add_argument(
++        "--experiment",
++        type=str,
++        required=True,
++        dest="owlite_experiment",
++        help="OwLite experiment name"
++    )
++    owlite_parser.add_argument(
++        '--duplicate-from', 
++        type=str,
++        default=None,
++        dest="owlite_duplicate_from",
++        help="The name of OwLite experiment "
++            "where the config to be duplicated is located"
++    )
++    owlite_parser.add_argument(
++        '--qat',
++        action="store_true",
++        dest="owlite_qat",
++        help="True if OwLite QAT is applied"
++    )
++    owlite_parser.add_argument(
++        '--calib-num',
++        type=int,
++        default=128,
++        dest="owlite_calib_num",
++        help="Number of data to use for OwLite calibration"
++    )
+ 
+     # distributed
+     parser.add_argument(
+@@ -48,7 +95,7 @@ def make_parser():
+     parser.add_argument(
+         "-e",
+         "--start_epoch",
+-        default=None,
++        default=295,
+         type=int,
+         help="resume training start epoch",
+     )
+diff --git a/yolox/core/trainer.py b/yolox/core/trainer.py
+index a764426..9254877 100644
+--- a/yolox/core/trainer.py
++++ b/yolox/core/trainer.py
+@@ -32,7 +32,8 @@ from yolox.utils import (
+     synchronize
+ )
+ 
+-
++import owlite #import owlite
++from yolox.models.yolo_head import YOLOXHeadForTrain, YOLOXForTrain
+ class Trainer:
+     def __init__(self, exp: Exp, args):
+         # init function only defines some basic attr, other attrs like model, optimizer are built in
+@@ -170,11 +171,45 @@ class Trainer:
+             self.ema_model = ModelEMA(model, 0.9998)
+             self.ema_model.updates = self.max_iter * self.start_epoch
+ 
+-        self.model = model
+-
++        if self.args.owlite_qat:
++            # init OwLite
++            self.owl = owlite.init(
++                project=self.args.owlite_project,
++                baseline=self.args.owlite_baseline,
++                experiment=self.args.owlite_experiment,
++                duplicate_from=self.args.owlite_duplicate_from
++            )
++            model.eval()
++            model.head.decode_in_inference = False
++            self.strides = model.head.strides
++            output_shapes = [
++                (self.exp.input_size[0] // stride,
++                self.exp.input_size[1] // stride) for stride in self.strides
++            ]
++            head = YOLOXHeadForTrain(model.head.num_classes,
++                    output_shapes,
++                    self.strides)    
++
++            # run OwLite convert
++            with torch.no_grad():
++                dummy_input = torch.randn(self.args.batch_size, 3, *self.exp.input_size)
++                model = self.owl.convert(model, dummy_input)
++
++            # calibrate the model with OwLite
++            with owlite.calibrate(model) as calibrate_model:
++                for idx in range(self.args.owlite_calib_num // self.args.batch_size):
++                    inps, _  = self.prefetcher.next()
++                    calibrate_model(inps)
++                    if (idx + 1) * self.args.batch_size >= self.args.owlite_calib_num:
++                        break
++            
++            self.model = YOLOXForTrain(model, head)
++            self.model.train()
++        else:
++            self.model = model
+         self.evaluator = self.exp.get_evaluator(
+-            batch_size=self.args.batch_size, is_distributed=self.is_distributed
+-        )
++                batch_size=self.args.batch_size, is_distributed=self.is_distributed,
++            )
+         # Tensorboard and Wandb loggers
+         if self.rank == 0:
+             if self.args.logger == "tensorboard":
+@@ -195,6 +230,11 @@ class Trainer:
+         logger.info(
+             "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
+         )
++        if self.args.owlite_qat:
++            self.model.eval()
++            # benchmark inference model
++            self.owl.benchmark(self.model.model)
++            self.owl.log(ap50_95 = self.best_ap)
+         if self.rank == 0:
+             if self.args.logger == "wandb":
+                 self.wandb_logger.finish()
+@@ -218,7 +258,8 @@ class Trainer:
+         self.save_ckpt(ckpt_name="latest")
+ 
+         if (self.epoch + 1) % self.exp.eval_interval == 0:
+-            all_reduce_norm(self.model)
++            if not self.args.owlite_qat:
++                all_reduce_norm(self.model)
+             self.evaluate_and_save_model()
+ 
+     def before_iter(self):
+@@ -332,10 +373,17 @@ class Trainer:
+             if is_parallel(evalmodel):
+                 evalmodel = evalmodel.module
+ 
+-        with adjust_status(evalmodel, training=False):
+-            (ap50_95, ap50, summary), predictions = self.exp.eval(
+-                evalmodel, self.evaluator, self.is_distributed, return_outputs=True
+-            )
++        if self.args.owlite_qat:
++            with adjust_status(evalmodel, training=False):
++                (ap50_95, ap50, summary), predictions = self.evaluator.evaluate(
++                    evalmodel.model, self.is_distributed, return_outputs=True,
++                    is_decoding_in_model = False, strides=self.strides,
++                )
++        else:
++            with adjust_status(evalmodel, training=False):
++                (ap50_95, ap50, summary), predictions = self.exp.eval(
++                    evalmodel, self.evaluator, self.is_distributed, return_outputs=True
++                )
+ 
+         update_best_ckpt = ap50_95 > self.best_ap
+         self.best_ap = max(self.best_ap, ap50_95)
+diff --git a/yolox/evaluators/coco_evaluator.py b/yolox/evaluators/coco_evaluator.py
+index e218c74..b4914e0 100644
+--- a/yolox/evaluators/coco_evaluator.py
++++ b/yolox/evaluators/coco_evaluator.py
+@@ -27,6 +27,22 @@ from yolox.utils import (
+     xyxy2xywh
+ )
+ 
++def decode_outputs(outputs, hw, stride_info):
++    grids = []
++    strides = []
++    for (hsize, wsize), stride in zip(hw, stride_info):
++        yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)])
++        grid = torch.stack((xv, yv), 2).view(1, -1, 2)
++        grids.append(grid)
++        shape = grid.shape[:2]
++        strides.append(torch.full((*shape, 1), stride))
++
++    grids = torch.cat(grids, dim=1).type(outputs.type())
++    strides = torch.cat(strides, dim=1).type(outputs.type())
++
++    outputs[..., :2] = (outputs[..., :2] + grids) * strides
++    outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides
++    return outputs
+ 
+ def per_class_AR_table(coco_eval, class_names=COCO_CLASSES, headers=["class", "AR"], colums=6):
+     per_class_AR = {}
+@@ -115,7 +131,7 @@ class COCOEvaluator:
+ 
+     def evaluate(
+         self, model, distributed=False, half=False, trt_file=None,
+-        decoder=None, test_size=None, return_outputs=False
++        decoder=None, test_size=None, return_outputs=False, is_decoding_in_model=True, strides=None
+     ):
+         """
+         COCO average precision (AP) Evaluation. Iterate inference on the test dataset
+@@ -167,6 +183,12 @@ class COCOEvaluator:
+                     start = time.time()
+ 
+                 outputs = model(imgs)
++
++                # if not is_decoding_in_model, decode outputs
++                if not is_decoding_in_model:
++                    hw = [(imgs.shape[2] // s, imgs.shape[3] // s) for s in strides]
++                    outputs = decode_outputs(outputs, hw, tuple(strides))
++
+                 if decoder is not None:
+                     outputs = decoder(outputs, dtype=outputs.type())
+ 
+diff --git a/yolox/models/__init__.py b/yolox/models/__init__.py
+index c74fd30..8f624a2 100644
+--- a/yolox/models/__init__.py
++++ b/yolox/models/__init__.py
+@@ -6,6 +6,6 @@ from .build import *
+ from .darknet import CSPDarknet, Darknet
+ from .losses import IOUloss
+ from .yolo_fpn import YOLOFPN
+-from .yolo_head import YOLOXHead
++from .yolo_head import YOLOXHead, YOLOXForTrain, YOLOXHeadForTrain
+ from .yolo_pafpn import YOLOPAFPN
+ from .yolox import YOLOX
+diff --git a/yolox/models/yolo_head.py b/yolox/models/yolo_head.py
+index 3e51768..0a287bd 100644
+--- a/yolox/models/yolo_head.py
++++ b/yolox/models/yolo_head.py
+@@ -639,3 +639,546 @@ class YOLOXHead(nn.Module):
+             save_name = save_prefix + str(batch_idx) + ".png"
+             img = visualize_assign(img, xyxy_boxes, coords, matched_gt_inds, save_name)
+             logger.info(f"save img to {save_name}")
++
++class YOLOXForTrain(nn.Module):
++    """
++    YOLOX model module for OwLite QAT,
++    which consist of a yolox model converted by OwLite and
++    a YOLOXHeadForTrain module for OwLite QAT.
++    """
++
++    def __init__(self, model=None, head=None):
++        super().__init__()
++        self.model = model
++        self.head = head
++
++    def forward(self, x, targets=None):
++        # output of inference model
++        outs = self.model(x)
++
++        assert targets is not None
++        loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg = self.head(
++            outs, targets
++        )
++        outputs = {
++            "total_loss": loss,
++            "iou_loss": iou_loss,
++            "l1_loss": l1_loss,
++            "conf_loss": conf_loss,
++            "cls_loss": cls_loss,
++            "num_fg": num_fg,
++        }
++
++        return outputs
++
++class YOLOXHeadForTrain(nn.Module):
++    def __init__(
++        self,
++        num_classes,
++        output_shapes,
++        strides=[8, 16, 32],
++    ):
++        """
++        additional YoloX head module for OwLite QAT
++        which mainly includes loss function
++        """
++        super().__init__()
++
++        self.num_classes = num_classes
++        self.decode_in_inference = True  # for deploy, set to False
++
++        self.use_l1 = False
++        self.l1_loss = nn.L1Loss(reduction="none")
++        self.bcewithlog_loss = nn.BCEWithLogitsLoss(reduction="none")
++        self.iou_loss = IOUloss(reduction="none")
++        self.strides = strides
++        self.grids = [torch.zeros(1)] * len(strides)
++        self.output_shapes = output_shapes
++        self.last_channels_per_head = [shape[0] * shape[1] for shape in self.output_shapes]
++
++    def forward(self, input, labels=None):
++        # TODO: Write codes for return self.get_losses() without conv modules
++        outputs = []
++        origin_preds = []
++        x_shifts = []
++        y_shifts = []
++        expanded_strides = []
++        
++        # split input into reg_output, obj_output, and cls_output of each head.
++        input = input.permute(0, 2, 1)
++        head_outputs = torch.split(input, self.last_channels_per_head, dim=-1)
++        
++        for idx, output in enumerate(head_outputs):
++            output = output.reshape((output.shape[0], output.shape[1], 
++                                     self.output_shapes[idx][0],self.output_shapes[idx][1]))
++            
++            reg_output, obj_output, cls_output = torch.split(output, [4, 1, self.num_classes], dim=1)
++            
++            obj_output, cls_output = torch.special.logit(obj_output), torch.special.logit(cls_output)
++            
++            output = torch.cat([reg_output, obj_output, cls_output], 1)
++            output, grid = self.get_output_and_grid(
++                output, idx, self.strides[idx], input.type()
++            )
++
++            x_shifts.append(grid[:, :, 0])
++            y_shifts.append(grid[:, :, 1])
++            expanded_strides.append(
++                torch.zeros(1, grid.shape[1])
++                .fill_(self.strides[idx])
++                .type_as(input)
++            )
++            if self.use_l1:
++                # batch_size = reg_output.shape[0]
++                # hsize, wsize = reg_output.shape[-2:]
++                # reg_output = reg_output.view(
++                #     batch_size, 1, 4, hsize, wsize
++                # )
++                # reg_output = reg_output.permute(0, 1, 3, 4, 2).reshape(
++                #     batch_size, -1, 4
++                # )
++                reg_output = reg_output.permute(0, 2, 3, 1).reshape(
++                    reg_output.shape[0], -1, 4
++                )
++                origin_preds.append(reg_output.clone())
++            outputs.append(output)
++
++        return self.get_losses(
++            None,
++            x_shifts,
++            y_shifts,
++            expanded_strides,
++            labels,
++            torch.cat(outputs, 1),
++            origin_preds,
++            dtype=input.dtype,
++        )
++
++
++    def get_output_and_grid(self, output, k, stride, dtype):
++        grid = self.grids[k]
++
++        batch_size = output.shape[0]
++        n_ch = 5 + self.num_classes
++        hsize, wsize = output.shape[-2:]
++        if grid.shape[2:4] != output.shape[2:4]:
++            yv, xv = meshgrid([torch.arange(hsize), torch.arange(wsize)])
++            grid = torch.stack((xv, yv), 2).view(1, 1, hsize, wsize, 2).type(dtype)
++            self.grids[k] = grid
++
++        output = output.view(batch_size, 1, n_ch, hsize, wsize)
++        output = output.permute(0, 1, 3, 4, 2).reshape(
++            batch_size, hsize * wsize, -1
++        )
++        grid = grid.view(1, -1, 2)
++        output[..., :2] = (output[..., :2] + grid) * stride
++        output[..., 2:4] = torch.exp(output[..., 2:4]) * stride
++        return output, grid
++
++    def decode_outputs(self, outputs, dtype):
++        grids = []
++        strides = []
++        for (hsize, wsize), stride in zip(self.hw, self.strides):
++            yv, xv = meshgrid([torch.arange(hsize), torch.arange(wsize)])
++            grid = torch.stack((xv, yv), 2).view(1, -1, 2)
++            grids.append(grid)
++            shape = grid.shape[:2]
++            strides.append(torch.full((*shape, 1), stride))
++
++        grids = torch.cat(grids, dim=1).type(dtype)
++        strides = torch.cat(strides, dim=1).type(dtype)
++
++        outputs = torch.cat([
++            (outputs[..., 0:2] + grids) * strides,
++            torch.exp(outputs[..., 2:4]) * strides,
++            outputs[..., 4:]
++        ], dim=-1)
++        return outputs
++
++    def get_losses(
++        self,
++        imgs,
++        x_shifts,
++        y_shifts,
++        expanded_strides,
++        labels,
++        outputs,
++        origin_preds,
++        dtype,
++    ):
++        bbox_preds = outputs[:, :, :4]  # [batch, n_anchors_all, 4]
++        obj_preds = outputs[:, :, 4:5]  # [batch, n_anchors_all, 1]
++        cls_preds = outputs[:, :, 5:]  # [batch, n_anchors_all, n_cls]
++
++        # calculate targets
++        nlabel = (labels.sum(dim=2) > 0).sum(dim=1)  # number of objects
++
++        total_num_anchors = outputs.shape[1]
++        x_shifts = torch.cat(x_shifts, 1)  # [1, n_anchors_all]
++        y_shifts = torch.cat(y_shifts, 1)  # [1, n_anchors_all]
++        expanded_strides = torch.cat(expanded_strides, 1)
++        if self.use_l1:
++            origin_preds = torch.cat(origin_preds, 1)
++
++        cls_targets = []
++        reg_targets = []
++        l1_targets = []
++        obj_targets = []
++        fg_masks = []
++
++        num_fg = 0.0
++        num_gts = 0.0
++
++        for batch_idx in range(outputs.shape[0]):
++            num_gt = int(nlabel[batch_idx])
++            num_gts += num_gt
++            if num_gt == 0:
++                cls_target = outputs.new_zeros((0, self.num_classes))
++                reg_target = outputs.new_zeros((0, 4))
++                l1_target = outputs.new_zeros((0, 4))
++                obj_target = outputs.new_zeros((total_num_anchors, 1))
++                fg_mask = outputs.new_zeros(total_num_anchors).bool()
++            else:
++                gt_bboxes_per_image = labels[batch_idx, :num_gt, 1:5]
++                gt_classes = labels[batch_idx, :num_gt, 0]
++                bboxes_preds_per_image = bbox_preds[batch_idx]
++
++                try:
++                    (
++                        gt_matched_classes,
++                        fg_mask,
++                        pred_ious_this_matching,
++                        matched_gt_inds,
++                        num_fg_img,
++                    ) = self.get_assignments(  # noqa
++                        batch_idx,
++                        num_gt,
++                        gt_bboxes_per_image,
++                        gt_classes,
++                        bboxes_preds_per_image,
++                        expanded_strides,
++                        x_shifts,
++                        y_shifts,
++                        cls_preds,
++                        obj_preds,
++                    )
++                except RuntimeError as e:
++                    # TODO: the string might change, consider a better way
++                    if "CUDA out of memory. " not in str(e):
++                        raise  # RuntimeError might not caused by CUDA OOM
++
++                    logger.error(
++                        "OOM RuntimeError is raised due to the huge memory cost during label assignment. \
++                           CPU mode is applied in this batch. If you want to avoid this issue, \
++                           try to reduce the batch size or image size."
++                    )
++                    torch.cuda.empty_cache()
++                    (
++                        gt_matched_classes,
++                        fg_mask,
++                        pred_ious_this_matching,
++                        matched_gt_inds,
++                        num_fg_img,
++                    ) = self.get_assignments(  # noqa
++                        batch_idx,
++                        num_gt,
++                        gt_bboxes_per_image,
++                        gt_classes,
++                        bboxes_preds_per_image,
++                        expanded_strides,
++                        x_shifts,
++                        y_shifts,
++                        cls_preds,
++                        obj_preds,
++                        "cpu",
++                    )
++
++                torch.cuda.empty_cache()
++                num_fg += num_fg_img
++
++                cls_target = F.one_hot(
++                    gt_matched_classes.to(torch.int64), self.num_classes
++                ) * pred_ious_this_matching.unsqueeze(-1)
++                obj_target = fg_mask.unsqueeze(-1)
++                reg_target = gt_bboxes_per_image[matched_gt_inds]
++                if self.use_l1:
++                    l1_target = self.get_l1_target(
++                        outputs.new_zeros((num_fg_img, 4)),
++                        gt_bboxes_per_image[matched_gt_inds],
++                        expanded_strides[0][fg_mask],
++                        x_shifts=x_shifts[0][fg_mask],
++                        y_shifts=y_shifts[0][fg_mask],
++                    )
++
++            cls_targets.append(cls_target)
++            reg_targets.append(reg_target)
++            obj_targets.append(obj_target.to(dtype))
++            fg_masks.append(fg_mask)
++            if self.use_l1:
++                l1_targets.append(l1_target)
++
++        cls_targets = torch.cat(cls_targets, 0)
++        reg_targets = torch.cat(reg_targets, 0)
++        obj_targets = torch.cat(obj_targets, 0)
++        fg_masks = torch.cat(fg_masks, 0)
++        if self.use_l1:
++            l1_targets = torch.cat(l1_targets, 0)
++
++        num_fg = max(num_fg, 1)
++        loss_iou = (
++            self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
++        ).sum() / num_fg
++        loss_obj = (
++            self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
++        ).sum() / num_fg
++        loss_cls = (
++            self.bcewithlog_loss(
++                cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
++            )
++        ).sum() / num_fg
++        if self.use_l1:
++            loss_l1 = (
++                self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)
++            ).sum() / num_fg
++        else:
++            loss_l1 = 0.0
++
++        reg_weight = 5.0
++        loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1
++
++        return (
++            loss,
++            reg_weight * loss_iou,
++            loss_obj,
++            loss_cls,
++            loss_l1,
++            num_fg / max(num_gts, 1),
++        )
++
++    def get_l1_target(self, l1_target, gt, stride, x_shifts, y_shifts, eps=1e-8):
++        l1_target[:, 0] = gt[:, 0] / stride - x_shifts
++        l1_target[:, 1] = gt[:, 1] / stride - y_shifts
++        l1_target[:, 2] = torch.log(gt[:, 2] / stride + eps)
++        l1_target[:, 3] = torch.log(gt[:, 3] / stride + eps)
++        return l1_target
++
++    @torch.no_grad()
++    def get_assignments(
++        self,
++        batch_idx,
++        num_gt,
++        gt_bboxes_per_image,
++        gt_classes,
++        bboxes_preds_per_image,
++        expanded_strides,
++        x_shifts,
++        y_shifts,
++        cls_preds,
++        obj_preds,
++        mode="gpu",
++    ):
++
++        if mode == "cpu":
++            print("-----------Using CPU for the Current Batch-------------")
++            gt_bboxes_per_image = gt_bboxes_per_image.cpu().float()
++            bboxes_preds_per_image = bboxes_preds_per_image.cpu().float()
++            gt_classes = gt_classes.cpu().float()
++            expanded_strides = expanded_strides.cpu().float()
++            x_shifts = x_shifts.cpu()
++            y_shifts = y_shifts.cpu()
++
++        fg_mask, geometry_relation = self.get_geometry_constraint(
++            gt_bboxes_per_image,
++            expanded_strides,
++            x_shifts,
++            y_shifts,
++        )
++
++        bboxes_preds_per_image = bboxes_preds_per_image[fg_mask]
++        cls_preds_ = cls_preds[batch_idx][fg_mask]
++        obj_preds_ = obj_preds[batch_idx][fg_mask]
++        num_in_boxes_anchor = bboxes_preds_per_image.shape[0]
++
++        if mode == "cpu":
++            gt_bboxes_per_image = gt_bboxes_per_image.cpu()
++            bboxes_preds_per_image = bboxes_preds_per_image.cpu()
++
++        pair_wise_ious = bboxes_iou(gt_bboxes_per_image, bboxes_preds_per_image, False)
++
++        gt_cls_per_image = (
++            F.one_hot(gt_classes.to(torch.int64), self.num_classes)
++            .float()
++        )
++        pair_wise_ious_loss = -torch.log(pair_wise_ious + 1e-8)
++
++        if mode == "cpu":
++            cls_preds_, obj_preds_ = cls_preds_.cpu(), obj_preds_.cpu()
++
++        with torch.cuda.amp.autocast(enabled=False):
++            cls_preds_ = (
++                cls_preds_.float().sigmoid_() * obj_preds_.float().sigmoid_()
++            ).sqrt()
++            pair_wise_cls_loss = F.binary_cross_entropy(
++                cls_preds_.unsqueeze(0).repeat(num_gt, 1, 1),
++                gt_cls_per_image.unsqueeze(1).repeat(1, num_in_boxes_anchor, 1),
++                reduction="none"
++            ).sum(-1)
++        del cls_preds_
++
++        cost = (
++            pair_wise_cls_loss
++            + 3.0 * pair_wise_ious_loss
++            + float(1e6) * (~geometry_relation)
++        )
++
++        (
++            num_fg,
++            gt_matched_classes,
++            pred_ious_this_matching,
++            matched_gt_inds,
++        ) = self.simota_matching(cost, pair_wise_ious, gt_classes, num_gt, fg_mask)
++        del pair_wise_cls_loss, cost, pair_wise_ious, pair_wise_ious_loss
++
++        if mode == "cpu":
++            gt_matched_classes = gt_matched_classes.cuda()
++            fg_mask = fg_mask.cuda()
++            pred_ious_this_matching = pred_ious_this_matching.cuda()
++            matched_gt_inds = matched_gt_inds.cuda()
++
++        return (
++            gt_matched_classes,
++            fg_mask,
++            pred_ious_this_matching,
++            matched_gt_inds,
++            num_fg,
++        )
++
++    def get_geometry_constraint(
++        self, gt_bboxes_per_image, expanded_strides, x_shifts, y_shifts,
++    ):
++        """
++        Calculate whether the center of an object is located in a fixed range of
++        an anchor. This is used to avert inappropriate matching. It can also reduce
++        the number of candidate anchors so that the GPU memory is saved.
++        """
++        expanded_strides_per_image = expanded_strides[0]
++        x_centers_per_image = ((x_shifts[0] + 0.5) * expanded_strides_per_image).unsqueeze(0)
++        y_centers_per_image = ((y_shifts[0] + 0.5) * expanded_strides_per_image).unsqueeze(0)
++
++        # in fixed center
++        center_radius = 1.5
++        center_dist = expanded_strides_per_image.unsqueeze(0) * center_radius
++        gt_bboxes_per_image_l = (gt_bboxes_per_image[:, 0:1]) - center_dist
++        gt_bboxes_per_image_r = (gt_bboxes_per_image[:, 0:1]) + center_dist
++        gt_bboxes_per_image_t = (gt_bboxes_per_image[:, 1:2]) - center_dist
++        gt_bboxes_per_image_b = (gt_bboxes_per_image[:, 1:2]) + center_dist
++
++        c_l = x_centers_per_image - gt_bboxes_per_image_l
++        c_r = gt_bboxes_per_image_r - x_centers_per_image
++        c_t = y_centers_per_image - gt_bboxes_per_image_t
++        c_b = gt_bboxes_per_image_b - y_centers_per_image
++        center_deltas = torch.stack([c_l, c_t, c_r, c_b], 2)
++        is_in_centers = center_deltas.min(dim=-1).values > 0.0
++        anchor_filter = is_in_centers.sum(dim=0) > 0
++        geometry_relation = is_in_centers[:, anchor_filter]
++
++        return anchor_filter, geometry_relation
++
++    def simota_matching(self, cost, pair_wise_ious, gt_classes, num_gt, fg_mask):
++        matching_matrix = torch.zeros_like(cost, dtype=torch.uint8)
++
++        n_candidate_k = min(10, pair_wise_ious.size(1))
++        topk_ious, _ = torch.topk(pair_wise_ious, n_candidate_k, dim=1)
++        dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
++        for gt_idx in range(num_gt):
++            _, pos_idx = torch.topk(
++                cost[gt_idx], k=dynamic_ks[gt_idx], largest=False
++            )
++            matching_matrix[gt_idx][pos_idx] = 1
++
++        del topk_ious, dynamic_ks, pos_idx
++
++        anchor_matching_gt = matching_matrix.sum(0)
++        # deal with the case that one anchor matches multiple ground-truths
++        if anchor_matching_gt.max() > 1:
++            multiple_match_mask = anchor_matching_gt > 1
++            _, cost_argmin = torch.min(cost[:, multiple_match_mask], dim=0)
++            matching_matrix[:, multiple_match_mask] *= 0
++            matching_matrix[cost_argmin, multiple_match_mask] = 1
++        fg_mask_inboxes = anchor_matching_gt > 0
++        num_fg = fg_mask_inboxes.sum().item()
++
++        fg_mask[fg_mask.clone()] = fg_mask_inboxes
++
++        matched_gt_inds = matching_matrix[:, fg_mask_inboxes].argmax(0)
++        gt_matched_classes = gt_classes[matched_gt_inds]
++
++        pred_ious_this_matching = (matching_matrix * pair_wise_ious).sum(0)[
++            fg_mask_inboxes
++        ]
++        return num_fg, gt_matched_classes, pred_ious_this_matching, matched_gt_inds
++
++    def visualize_assign_result(self, xin, labels=None, imgs=None, save_prefix="assign_vis_"):
++        # original forward logic
++        outputs, x_shifts, y_shifts, expanded_strides = [], [], [], []
++        # TODO: use forward logic here.
++
++        for k, (cls_conv, reg_conv, stride_this_level, x) in enumerate(
++            zip(self.cls_convs, self.reg_convs, self.strides, xin)
++        ):
++            x = self.stems[k](x)
++            cls_x = x
++            reg_x = x
++
++            cls_feat = cls_conv(cls_x)
++            cls_output = self.cls_preds[k](cls_feat)
++            reg_feat = reg_conv(reg_x)
++            reg_output = self.reg_preds[k](reg_feat)
++            obj_output = self.obj_preds[k](reg_feat)
++
++            output = torch.cat([reg_output, obj_output, cls_output], 1)
++            output, grid = self.get_output_and_grid(output, k, stride_this_level, xin[0].type())
++            x_shifts.append(grid[:, :, 0])
++            y_shifts.append(grid[:, :, 1])
++            expanded_strides.append(
++                torch.full((1, grid.shape[1]), stride_this_level).type_as(xin[0])
++            )
++            outputs.append(output)
++
++        outputs = torch.cat(outputs, 1)
++        bbox_preds = outputs[:, :, :4]  # [batch, n_anchors_all, 4]
++        obj_preds = outputs[:, :, 4:5]  # [batch, n_anchors_all, 1]
++        cls_preds = outputs[:, :, 5:]  # [batch, n_anchors_all, n_cls]
++
++        # calculate targets
++        total_num_anchors = outputs.shape[1]
++        x_shifts = torch.cat(x_shifts, 1)  # [1, n_anchors_all]
++        y_shifts = torch.cat(y_shifts, 1)  # [1, n_anchors_all]
++        expanded_strides = torch.cat(expanded_strides, 1)
++
++        nlabel = (labels.sum(dim=2) > 0).sum(dim=1)  # number of objects
++        for batch_idx, (img, num_gt, label) in enumerate(zip(imgs, nlabel, labels)):
++            img = imgs[batch_idx].permute(1, 2, 0).to(torch.uint8)
++            num_gt = int(num_gt)
++            if num_gt == 0:
++                fg_mask = outputs.new_zeros(total_num_anchors).bool()
++            else:
++                gt_bboxes_per_image = label[:num_gt, 1:5]
++                gt_classes = label[:num_gt, 0]
++                bboxes_preds_per_image = bbox_preds[batch_idx]
++                _, fg_mask, _, matched_gt_inds, _ = self.get_assignments(  # noqa
++                    batch_idx, num_gt, gt_bboxes_per_image, gt_classes,
++                    bboxes_preds_per_image, expanded_strides, x_shifts,
++                    y_shifts, cls_preds, obj_preds,
++                )
++
++            img = img.cpu().numpy().copy()  # copy is crucial here
++            coords = torch.stack([
++                ((x_shifts + 0.5) * expanded_strides).flatten()[fg_mask],
++                ((y_shifts + 0.5) * expanded_strides).flatten()[fg_mask],
++            ], 1)
++
++            xyxy_boxes = cxcywh2xyxy(gt_bboxes_per_image)
++            save_name = save_prefix + str(batch_idx) + ".png"
++            img = visualize_assign(img, xyxy_boxes, coords, matched_gt_inds, save_name)
++            logger.info(f"save img to {save_name}")
+\ No newline at end of file
+diff --git a/yolox/models/yolo_pafpn.py b/yolox/models/yolo_pafpn.py
+index 4c4e18a..9cb7ce0 100644
+--- a/yolox/models/yolo_pafpn.py
++++ b/yolox/models/yolo_pafpn.py
+@@ -7,7 +7,7 @@ import torch.nn as nn
+ 
+ from .darknet import CSPDarknet
+ from .network_blocks import BaseConv, CSPLayer, DWConv
+-
++import torch.nn.functional as F
+ 
+ class YOLOPAFPN(nn.Module):
+     """
+@@ -29,7 +29,7 @@ class YOLOPAFPN(nn.Module):
+         self.in_channels = in_channels
+         Conv = DWConv if depthwise else BaseConv
+ 
+-        self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
++        #self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
+         self.lateral_conv0 = BaseConv(
+             int(in_channels[2] * width), int(in_channels[1] * width), 1, 1, act=act
+         )
+@@ -95,12 +95,12 @@ class YOLOPAFPN(nn.Module):
+         [x2, x1, x0] = features
+ 
+         fpn_out0 = self.lateral_conv0(x0)  # 1024->512/32
+-        f_out0 = self.upsample(fpn_out0)  # 512/16
++        f_out0 = F.interpolate(fpn_out0, (fpn_out0.shape[2]*2, fpn_out0.shape[3]*2))  # 512/16
+         f_out0 = torch.cat([f_out0, x1], 1)  # 512->1024/16
+         f_out0 = self.C3_p4(f_out0)  # 1024->512/16
+ 
+         fpn_out1 = self.reduce_conv1(f_out0)  # 512->256/16
+-        f_out1 = self.upsample(fpn_out1)  # 256/8
++        f_out1 = F.interpolate(fpn_out1, (fpn_out1.shape[2]*2, fpn_out1.shape[3]*2))  # 256/8
+         f_out1 = torch.cat([f_out1, x2], 1)  # 256->512/8
+         pan_out2 = self.C3_p3(f_out1)  # 512->256/8
+ 
+diff --git a/yolox/utils/lr_scheduler.py b/yolox/utils/lr_scheduler.py
+index 42c00cf..f9eedd8 100644
+--- a/yolox/utils/lr_scheduler.py
++++ b/yolox/utils/lr_scheduler.py
+@@ -89,6 +89,8 @@ class LRScheduler:
+             ]
+             gamma = getattr(self, "gamma", 0.1)
+             lr_func = partial(multistep_lr, self.lr, milestones, gamma)
++        elif name == "constant": # constant lr schedule
++            lr_func = partial(constant_lr, self.lr)
+         else:
+             raise ValueError("Scheduler version {} not supported.".format(name))
+         return lr_func
+@@ -203,3 +205,7 @@ def multistep_lr(lr, milestones, gamma, iters):
+     for milestone in milestones:
+         lr *= gamma if iters >= milestone else 1.0
+     return lr
++
++def constant_lr(lr, iters):
++    """Constant learning rate"""
++    return lr
+\ No newline at end of file

@@ -1,0 +1,431 @@
+diff --git a/data/hyps/hyp.scratch-owlite.yaml b/data/hyps/hyp.scratch-owlite.yaml
+new file mode 100644
+index 0000000..287c22d
+--- /dev/null
++++ b/data/hyps/hyp.scratch-owlite.yaml
+@@ -0,0 +1,34 @@
++# YOLOv5 🚀 by Ultralytics, AGPL-3.0 license
++# Hyperparameters for medium-augmentation COCO training from scratch
++# python train.py --batch 32 --cfg yolov5m6.yaml --weights '' --data coco.yaml --img 1280 --epochs 300
++# See tutorials for hyperparameter evolution https://github.com/ultralytics/yolov5#tutorials
++
++lr0: 0.0001  # initial learning rate (SGD=1E-4, Adam=1E-5)
++lrf: 1  # final OneCycleLR learning rate (lr0 * lrf)
++momentum: 0.937  # SGD momentum/Adam beta1
++weight_decay: 0.0001  # optimizer weight decay 1e-4
++warmup_epochs: 0  # warmup epochs (fractions ok)
++warmup_momentum: 0.8  # warmup initial momentum
++warmup_bias_lr: 0.001  # warmup initial bias lr
++box: 0.05  # box loss gain
++cls: 0.3  # cls loss gain
++cls_pw: 1.0  # cls BCELoss positive_weight
++obj: 0.7  # obj loss gain (scale with pixels)
++obj_pw: 1.0  # obj BCELoss positive_weight
++iou_t: 0.20  # IoU training threshold
++anchor_t: 4.0  # anchor-multiple threshold
++# anchors: 3  # anchors per output layer (0 to ignore)
++fl_gamma: 0.0  # focal loss gamma (efficientDet default gamma=1.5)
++hsv_h: 0.015  # image HSV-Hue augmentation (fraction)
++hsv_s: 0.7  # image HSV-Saturation augmentation (fraction)
++hsv_v: 0.4  # image HSV-Value augmentation (fraction)
++degrees: 0.0  # image rotation (+/- deg)
++translate: 0.1  # image translation (+/- fraction)
++scale: 0.9  # image scale (+/- gain)
++shear: 0.0  # image shear (+/- deg)
++perspective: 0.0  # image perspective (+/- fraction), range 0-0.001
++flipud: 0.0  # image flip up-down (probability)
++fliplr: 0.5  # image flip left-right (probability)
++mosaic: 1.0  # image mosaic (probability)
++mixup: 0.1  # image mixup (probability)
++copy_paste: 0.0  # segment copy-paste (probability)
+diff --git a/models/common.py b/models/common.py
+index 75cc4e9..75d1a74 100644
+--- a/models/common.py
++++ b/models/common.py
+@@ -238,11 +238,9 @@ class SPPF(nn.Module):
+ 
+     def forward(self, x):
+         x = self.cv1(x)
+-        with warnings.catch_warnings():
+-            warnings.simplefilter('ignore')  # suppress torch 1.9.0 max_pool2d() warning
+-            y1 = self.m(x)
+-            y2 = self.m(y1)
+-            return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
++        y1 = self.m(x)
++        y2 = self.m(y1)
++        return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
+ 
+ 
+ class Focus(nn.Module):
+diff --git a/requirements.txt b/requirements.txt
+index 63f4a91..9567c4c 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -12,8 +12,8 @@ PyYAML>=5.3.1
+ requests>=2.23.0
+ scipy>=1.4.1
+ thop>=0.1.1  # FLOPs computation
+-torch>=1.8.0  # see https://pytorch.org/get-started/locally (recommended)
+-torchvision>=0.9.0
++torch>=2.1.0  # see https://pytorch.org/get-started/locally (recommended)
++torchvision>=0.16.0
+ tqdm>=4.64.0
+ ultralytics>=8.0.147
+ # protobuf<=3.20.1  # https://github.com/ultralytics/yolov5/issues/8012
+diff --git a/train.py b/train.py
+index 4c3bec3..67d9568 100644
+--- a/train.py
++++ b/train.py
+@@ -38,6 +38,7 @@ import torch.nn as nn
+ import yaml
+ from torch.optim import lr_scheduler
+ from tqdm import tqdm
++import owlite
+ 
+ FILE = Path(__file__).resolve()
+ ROOT = FILE.parents[0]  # YOLOv5 root directory
+@@ -112,6 +113,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+     # Config
+     plots = not evolve and not opt.noplots  # create plots
+     cuda = device.type != 'cpu'
++    ngpus_per_node = torch.cuda.device_count() if cuda else 1
+     init_seeds(opt.seed + 1 + RANK, deterministic=True)
+     with torch_distributed_zero_first(LOCAL_RANK):
+         data_dict = data_dict or check_dataset(data)  # check if None
+@@ -135,7 +137,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+         LOGGER.info(f'Transferred {len(csd)}/{len(model.state_dict())} items from {weights}')  # report
+     else:
+         model = Model(cfg, ch=3, nc=nc, anchors=hyp.get('anchors')).to(device)  # create
+-    amp = check_amp(model)  # check AMP
++    amp = False
+ 
+     # Freeze
+     freeze = [f'model.{x}.' for x in (freeze if len(freeze) > 1 else range(freeze[0]))]  # layers to freeze
+@@ -154,12 +156,24 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+     if RANK == -1 and batch_size == -1:  # single-GPU only, estimate best batch size
+         batch_size = check_train_batch_size(model, imgsz, amp)
+         loggers.on_params_update({'batch_size': batch_size})
++        
++    # Initialize OwLite with user settings
++    owl = owlite.init(
++        project=opt.owlite_project, 
++        baseline=opt.owlite_baseline, 
++        experiment=opt.owlite_experiment, 
++        duplicate_from=opt.owlite_duplicate_from
++    )
++    
++    # OwLite Model Quantization
++    example_input = torch.randn(batch_size // (WORLD_SIZE*ngpus_per_node), 3, 640, 640).to(device)
++    owlite_model = owl.convert(model.eval(), example_input)
+ 
+     # Optimizer
+     nbs = 64  # nominal batch size
+     accumulate = max(round(nbs / batch_size), 1)  # accumulate loss before optimizing
+     hyp['weight_decay'] *= batch_size * accumulate / nbs  # scale weight_decay
+-    optimizer = smart_optimizer(model, opt.optimizer, hyp['lr0'], hyp['momentum'], hyp['weight_decay'])
++    optimizer = smart_optimizer(owlite_model, opt.optimizer, hyp['lr0'], hyp['momentum'], hyp['weight_decay'])
+ 
+     # Scheduler
+     if opt.cos_lr:
+@@ -168,15 +182,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+         lf = lambda x: (1 - x / epochs) * (1.0 - hyp['lrf']) + hyp['lrf']  # linear
+     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)  # plot_lr_scheduler(optimizer, scheduler, epochs)
+ 
+-    # EMA
+-    ema = ModelEMA(model) if RANK in {-1, 0} else None
+-
+     # Resume
+     best_fitness, start_epoch = 0.0, 0
+-    if pretrained:
+-        if resume:
+-            best_fitness, start_epoch, epochs = smart_resume(ckpt, optimizer, ema, weights, epochs, resume)
+-        del ckpt, csd
+ 
+     # DP mode
+     if cuda and RANK == -1 and torch.cuda.device_count() > 1:
+@@ -184,11 +191,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+             'WARNING ⚠️ DP not recommended, use torch.distributed.run for best DDP Multi-GPU results.\n'
+             'See Multi-GPU Tutorial at https://docs.ultralytics.com/yolov5/tutorials/multi_gpu_training to get started.'
+         )
+-        model = torch.nn.DataParallel(model)
++        owlite_model = torch.nn.DataParallel(owlite_model)
+ 
+     # SyncBatchNorm
+     if opt.sync_bn and cuda and RANK != -1:
+-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(device)
++        owlite_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(owlite_model).to(device)
+         LOGGER.info('Using SyncBatchNorm()')
+ 
+     # Trainloader
+@@ -211,26 +218,33 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+     labels = np.concatenate(dataset.labels, 0)
+     mlc = int(labels[:, 0].max())  # max label class
+     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
+-
++    
++    if opt.owlite_ptq or opt.owlite_qat:
++        # OwLite Model Calibration
++        if owl.baseline_name != owl.experiment_name:  # Condition for quantization mode
++            with owlite.calibrate(owlite_model) as calibrate_model:
++                for i, (imgs, _, _, _) in enumerate(train_loader):
++                    if i > 0 and i >= opt.owlite_calib_num // batch_size:
++                        break
++                    imgs = imgs.float()/255
++                    calibrate_model(imgs.to(device))
+     # Process 0
+     if RANK in {-1, 0}:
+         val_loader = create_dataloader(val_path,
+                                        imgsz,
+-                                       batch_size // WORLD_SIZE * 2,
++                                       batch_size // (WORLD_SIZE*ngpus_per_node),
+                                        gs,
+                                        single_cls,
+                                        hyp=hyp,
+                                        cache=None if noval else opt.cache,
+-                                       rect=True,
++                                       rect=False,
+                                        rank=-1,
+                                        workers=workers * 2,
+-                                       pad=0.5,
+                                        prefix=colorstr('val: '))[0]
+ 
+         if not resume:
+             if not opt.noautoanchor:
+                 check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)  # run AutoAnchor
+-            model.half().float()  # pre-reduce anchor precision
+ 
+         callbacks.run('on_pretrain_routine_end', labels, names)
+ 
+@@ -248,7 +262,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+     model.hyp = hyp  # attach hyperparameters to model
+     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
+     model.names = names
+-
++    de_parallel(owlite_model).nc = nc  # attach number of classes to model
++    de_parallel(owlite_model).hyp = hyp  # attach hyperparameters to model
++    de_parallel(owlite_model).class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
++    de_parallel(owlite_model).names = names
+     # Start training
+     t0 = time.time()
+     nb = len(train_loader)  # number of batches
+@@ -266,13 +283,39 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+                 f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
+                 f"Logging results to {colorstr('bold', save_dir)}\n"
+                 f'Starting training for {epochs} epochs...')
++    
++    if opt.owlite_ptq or not opt.owlite_qat:
++        # Benchmark the model using OwLite
++        if isinstance(owlite_model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
++            owl.benchmark(owlite_model.module)
++        else:
++            owl.benchmark(owlite_model)
++        results, _, _ = validate.run(
++            data_dict,
++            batch_size=batch_size // WORLD_SIZE,
++            imgsz=imgsz,
++            half=False,
++            model=de_parallel(owlite_model),
++            iou_thres=0.65 if is_coco else 0.60,  # best pycocotools at iou 0.65
++            single_cls=single_cls,
++            dataloader=val_loader,
++            save_dir=save_dir,
++            save_json=is_coco,
++            verbose=True,
++            plots=plots,
++            callbacks=callbacks,
++            compute_loss=compute_loss)  # val best model with plots
++        map = results[3]
++        owl.log(mAP=map)
++        return
++    
+     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
+         callbacks.run('on_train_epoch_start')
+-        model.train()
++        owlite_model.train()
+ 
+         # Update image weights (optional, single-GPU only)
+         if opt.image_weights:
+-            cw = model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
++            cw = owlite_model.class_weights.cpu().numpy() * (1 - maps) ** 2 / nc  # class weights
+             iw = labels_to_image_weights(dataset.labels, nc=nc, class_weights=cw)  # image weights
+             dataset.indices = random.choices(range(dataset.n), weights=iw, k=dataset.n)  # rand weighted idx
+ 
+@@ -314,7 +357,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+ 
+             # Forward
+             with torch.cuda.amp.autocast(amp):
+-                pred = model(imgs)  # forward
++                pred = owlite_model(imgs)[1]  # forward
+                 loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+                 if RANK != -1:
+                     loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
+@@ -327,12 +370,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+             # Optimize - https://pytorch.org/docs/master/notes/amp_examples.html
+             if ni - last_opt_step >= accumulate:
+                 scaler.unscale_(optimizer)  # unscale gradients
+-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)  # clip gradients
++                torch.nn.utils.clip_grad_norm_(owlite_model.parameters(), max_norm=10.0)  # clip gradients
+                 scaler.step(optimizer)  # optimizer.step
+                 scaler.update()
+                 optimizer.zero_grad()
+-                if ema:
+-                    ema.update(model)
+                 last_opt_step = ni
+ 
+             # Log
+@@ -341,7 +382,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+                 mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
+                 pbar.set_description(('%11s' * 2 + '%11.4g' * 5) %
+                                      (f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
+-                callbacks.run('on_train_batch_end', model, ni, imgs, targets, paths, list(mloss))
++                callbacks.run('on_train_batch_end', owlite_model, ni, imgs, targets, paths, list(mloss))
+                 if callbacks.stop_training:
+                     return
+             # end batch ------------------------------------------------------------------------------------------------
+@@ -353,14 +394,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+         if RANK in {-1, 0}:
+             # mAP
+             callbacks.run('on_train_epoch_end', epoch=epoch)
+-            ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'names', 'stride', 'class_weights'])
+             final_epoch = (epoch + 1 == epochs) or stopper.possible_stop
+             if not noval or final_epoch:  # Calculate mAP
+                 results, maps, _ = validate.run(data_dict,
+-                                                batch_size=batch_size // WORLD_SIZE * 2,
++                                                batch_size=batch_size // WORLD_SIZE,
+                                                 imgsz=imgsz,
+                                                 half=amp,
+-                                                model=ema.ema,
++                                                model=de_parallel(owlite_model),
+                                                 single_cls=single_cls,
+                                                 dataloader=val_loader,
+                                                 save_dir=save_dir,
+@@ -381,9 +421,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+                 ckpt = {
+                     'epoch': epoch,
+                     'best_fitness': best_fitness,
+-                    'model': deepcopy(de_parallel(model)).half(),
+-                    'ema': deepcopy(ema.ema).half(),
+-                    'updates': ema.updates,
++                    'model': de_parallel(owlite_model).state_dict(),
+                     'optimizer': optimizer.state_dict(),
+                     'opt': vars(opt),
+                     'git': GIT_INFO,  # {remote, branch, commit} if a git repo
+@@ -413,14 +451,20 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+         LOGGER.info(f'\n{epoch - start_epoch + 1} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
+         for f in last, best:
+             if f.exists():
+-                strip_optimizer(f)  # strip optimizers
+                 if f is best:
++                    owlite_model.load_state_dict(torch.load(f)['model'])
++                    # Benchmark the model using OwLite
++                    if isinstance(owlite_model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
++                        owl.benchmark(owlite_model.module)
++                    else:
++                        owl.benchmark(owlite_model)
+                     LOGGER.info(f'\nValidating {f}...')
+                     results, _, _ = validate.run(
+                         data_dict,
+-                        batch_size=batch_size // WORLD_SIZE * 2,
++                        batch_size=batch_size // WORLD_SIZE,
+                         imgsz=imgsz,
+-                        model=attempt_load(f, device).half(),
++                        half=False,
++                        model=de_parallel(owlite_model),
+                         iou_thres=0.65 if is_coco else 0.60,  # best pycocotools at iou 0.65
+                         single_cls=single_cls,
+                         dataloader=val_loader,
+@@ -430,6 +474,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+                         plots=plots,
+                         callbacks=callbacks,
+                         compute_loss=compute_loss)  # val best model with plots
++                    map = results[3]
++                    owl.log(mAP=map.item())
+                     if is_coco:
+                         callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
+ 
+@@ -443,10 +489,10 @@ def parse_opt(known=False):
+     parser = argparse.ArgumentParser()
+     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
+     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
+-    parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='dataset.yaml path')
+-    parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-low.yaml', help='hyperparameters path')
+-    parser.add_argument('--epochs', type=int, default=100, help='total training epochs')
+-    parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
++    parser.add_argument('--data', type=str, default=ROOT / 'data/coco.yaml', help='dataset.yaml path')
++    parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-owlite.yaml', help='hyperparameters path')
++    parser.add_argument('--epochs', type=int, default=1, help='total training epochs')
++    parser.add_argument('--batch-size', type=int, default=32, help='total batch size for all GPUs, -1 for autobatch')
+     parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
+     parser.add_argument('--rect', action='store_true', help='rectangular training')
+     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
+@@ -481,6 +527,16 @@ def parse_opt(known=False):
+     parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
+     parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
+     parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')
++    
++    subparsers = parser.add_subparsers(required=True)
++    owlite_parser = subparsers.add_parser("owlite", help="Owlite arguments")
++    owlite_parser.add_argument('--project', type=str, required=True, dest="owlite_project", help="OwLite project name")
++    owlite_parser.add_argument('--baseline', type=str, required=True, dest="owlite_baseline", help="OwLite baseline name")
++    owlite_parser.add_argument('--experiment', type=str, default=None, dest="owlite_experiment", help="OwLite experiment name")
++    owlite_parser.add_argument('--duplicate-from', type=str, default=None, dest="owlite_duplicate_from", help="The name of Owlite experiment where the config to be duplicated is located")
++    owlite_parser.add_argument('--ptq', action="store_true", dest="owlite_ptq", help="True if OwLite PTQ is applied")
++    owlite_parser.add_argument('--qat', action="store_true", dest="owlite_qat", help="True if OwLite QAT is applied")
++    owlite_parser.add_argument('--calib-num', type=int, default=256, dest="owlite_calib_num", help="Number of data to use for Owlite calibration")
+ 
+     return parser.parse_known_args()[0] if known else parser.parse_args()
+ 
+diff --git a/utils/dataloaders.py b/utils/dataloaders.py
+index 1fbd036..ec44abb 100644
+--- a/utils/dataloaders.py
++++ b/utils/dataloaders.py
+@@ -150,7 +150,8 @@ def create_dataloader(path,
+                   pin_memory=PIN_MEMORY,
+                   collate_fn=LoadImagesAndLabels.collate_fn4 if quad else LoadImagesAndLabels.collate_fn,
+                   worker_init_fn=seed_worker,
+-                  generator=generator), dataset
++                  generator=generator,
++                  drop_last=True), dataset
+ 
+ 
+ class InfiniteDataLoader(dataloader.DataLoader):
+@@ -736,9 +737,8 @@ class LoadImagesAndLabels(Dataset):
+                 assert im is not None, f'Image Not Found {f}'
+             h0, w0 = im.shape[:2]  # orig hw
+             r = self.img_size / max(h0, w0)  # ratio
+-            if r != 1:  # if sizes are not equal
+-                interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
+-                im = cv2.resize(im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp)
++            interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
++            im = cv2.resize(im, (self.img_size, self.img_size), interpolation=interp)
+             return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
+         return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
+ 
+diff --git a/val.py b/val.py
+index 8da3ef7..8c39001 100644
+--- a/val.py
++++ b/val.py
+@@ -311,23 +311,6 @@ def run(
+         with open(pred_json, 'w') as f:
+             json.dump(jdict, f)
+ 
+-        try:  # https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocoEvalDemo.ipynb
+-            check_requirements('pycocotools>=2.0.6')
+-            from pycocotools.coco import COCO
+-            from pycocotools.cocoeval import COCOeval
+-
+-            anno = COCO(anno_json)  # init annotations api
+-            pred = anno.loadRes(pred_json)  # init predictions api
+-            eval = COCOeval(anno, pred, 'bbox')
+-            if is_coco:
+-                eval.params.imgIds = [int(Path(x).stem) for x in dataloader.dataset.im_files]  # image IDs to evaluate
+-            eval.evaluate()
+-            eval.accumulate()
+-            eval.summarize()
+-            map, map50 = eval.stats[:2]  # update results (mAP@0.5:0.95, mAP@0.5)
+-        except Exception as e:
+-            LOGGER.info(f'pycocotools unable to run: {e}')
+-
+     # Return results
+     model.float()  # for training
+     if not training:

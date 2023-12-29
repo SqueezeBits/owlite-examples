@@ -1,0 +1,19 @@
+[submodule "image-segmentation/DeepLabV3Plus-Pytorch"]
+	path = image-segmentation/DeepLabV3Plus-Pytorch
+	url = https://github.com/VainF/DeepLabV3Plus-Pytorch.git
+[submodule "object-detection/owlite_YOLOv5/YOLOv5"]
+	path = object-detection/owlite_YOLOv5/YOLOv5
+	url = https://github.com/ultralytics/yolov5
+[submodule "object-detection/owlite_YOLOv6/YOLOv6"]
+	path = object-detection/owlite_YOLOv6/YOLOv6
+	url = https://github.com/meituan/YOLOv6.git
+[submodule "text-classification/transformers"]
+	path = text-classification/transformers
+	url = https://github.com/huggingface/transformers.git
+	branch = v4.34-release
+[submodule "object-detection/owlite_YOLOv8/YOLOv8"]
+	path = object-detection/owlite_YOLOv8/YOLOv8
+	url = https://github.com/ultralytics/ultralytics.git
+[submodule "object-detection/owlite_YOLOX/YOLOX"]
+	path = object-detection/owlite_YOLOX/YOLOX
+	url = https://github.com/Megvii-BaseDetection/YOLOX.git

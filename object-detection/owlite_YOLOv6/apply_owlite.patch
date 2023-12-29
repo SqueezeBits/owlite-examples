@@ -1,0 +1,178 @@
+diff --git a/requirements.txt b/requirements.txt
+index 92f483d..29c5f28 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,8 +1,8 @@
+ # pip install -r requirements.txt
+-# python3.8 environment
++# python3.10 environment
+ 
+-torch>=1.8.0
+-torchvision>=0.9.0
++torch>=2.1.0
++torchvision>=0.16.0
+ numpy>=1.24.0
+ opencv-python>=4.1.2
+ PyYAML>=5.3.1
+@@ -14,4 +14,5 @@ pycocotools>=2.0
+ onnx>=1.10.0  # ONNX export
+ onnx-simplifier>=0.3.6 # ONNX simplifier
+ thop  # FLOPs computation
++psutil
+ # pytorch_quantization>=2.1.1
+diff --git a/tools/eval.py b/tools/eval.py
+index 5543029..a858168 100644
+--- a/tools/eval.py
++++ b/tools/eval.py
+@@ -5,6 +5,7 @@ import os
+ import os.path as osp
+ import sys
+ import torch
++import owlite
+ 
+ ROOT = os.getcwd()
+ if str(ROOT) not in sys.path:
+@@ -44,8 +45,18 @@ def get_args_parser(add_help=True):
+     parser.add_argument('--verbose', default=False, action='store_true', help='whether to print metric on each class')
+     parser.add_argument('--config-file', default='', type=str, help='experiments description file, lower priority than reproduce_640_eval')
+     parser.add_argument('--specific-shape', action='store_true', help='rectangular training')
+-    parser.add_argument('--height', type=int, default=None, help='image height of model input')
+-    parser.add_argument('--width', type=int, default=None, help='image width of model input')
++    parser.add_argument('--height', type=int, default=640, help='image height of model input')
++    parser.add_argument('--width', type=int, default=640, help='image width of model input')
++    
++    subparsers = parser.add_subparsers(required=True)
++    owlite_parser = subparsers.add_parser("owlite", help="Owlite arguments")
++    owlite_parser.add_argument('--project', type=str, required=True, dest="owlite_project", help="Owlite project name")
++    owlite_parser.add_argument('--baseline', type=str, required=True, dest="owlite_baseline", help="Owlite baseline name")
++    owlite_parser.add_argument('--experiment', type=str, default=None, dest="owlite_experiment", help="Owlite experiment name")
++    owlite_parser.add_argument('--duplicate-from', type=str, default=None, dest="owlite_duplicate_from", help="The name of Owlite experiment where the config to be duplicated is located")
++    owlite_parser.add_argument('--ptq', action="store_true", dest="owlite_ptq", help="True if Owlite PTQ is applied")
++    owlite_parser.add_argument('--calib-num', type=int, default=256, dest="owlite_calib_num", help="Number of data to use for Owlite calibration")
++    
+     args = parser.parse_args()
+ 
+     if args.config_file:
+@@ -113,7 +124,13 @@ def run(data,
+         config_file=None,
+         specific_shape=False,
+         height=640,
+-        width=640
++        width=640,
++        owlite_project="",
++        owlite_baseline="",
++        owlite_experiment="",
++        owlite_duplicate_from="",
++        owlite_ptq=False,
++        owlite_calib_num=256
+         ):
+     """ Run the evaluation process
+ 
+@@ -152,11 +169,39 @@ def run(data,
+                 specific_shape=specific_shape,height=height, width=width)
+     model = val.init_model(model, weights, task)
+     dataloader = val.init_data(dataloader, task)
++    train_loader = val.init_data(None, task)
++    train_loader.dataset.img_dir = val.data["train"]
++
++    # Initialize OwLite with user settings
++    owl = owlite.init(
++        project=owlite_project, 
++        baseline=owlite_baseline, 
++        experiment=owlite_experiment, 
++        duplicate_from=owlite_duplicate_from
++    )
++ 
++    # OwLite Model Quantization
++    example_input = torch.randn(batch_size, 3, 640, 640).to(device)
++    model = owl.convert(model.eval(), example_input)
++    
++    if owlite_ptq:
++        # Calibrate the model with OwLite
++        if owl.baseline_name != owl.experiment_name:  # Condition for quantization mode
++            with owlite.calibrate(model) as calibrate_model:
++                for i, (imgs, _, _, _) in enumerate(train_loader):
++                    if i > 0 and i >= owlite_calib_num // batch_size:
++                        break
++                    imgs = imgs.float()/255
++                    calibrate_model(imgs.to(device))
++
++    # Benchmark the model using OwLite
++    owl.benchmark(model)
+ 
+     # eval
+     model.eval()
+     pred_result, vis_outputs, vis_paths = val.predict_model(model, dataloader, task)
+     eval_result = val.eval_model(pred_result, model, dataloader, task)
++    owl.log(mAP=eval_result[1].item())
+     return eval_result, vis_outputs, vis_paths
+ 
+ 
+diff --git a/yolov6/assigners/anchor_generator.py b/yolov6/assigners/anchor_generator.py
+index c827641..9768aef 100644
+--- a/yolov6/assigners/anchor_generator.py
++++ b/yolov6/assigners/anchor_generator.py
+@@ -21,13 +21,17 @@ def generate_anchors(feats, fpn_strides, grid_cell_size=5.0, grid_cell_offset=0.
+             if mode == 'af': # anchor-free
+                 anchor_points.append(anchor_point.reshape([-1, 2]))
+                 stride_tensor.append(
+-                torch.full(
+-                    (h * w, 1), stride, dtype=torch.float, device=device))
++                    stride
++                    * torch.ones((h * w, 1), dtype=torch.float, device=device)
++                )
+             elif mode == 'ab': # anchor-based
+                 anchor_points.append(anchor_point.reshape([-1, 2]).repeat(3,1))
+                 stride_tensor.append(
+-                    torch.full(
+-                        (h * w, 1), stride, dtype=torch.float, device=device).repeat(3,1))
++                    stride
++                    * torch.ones(
++                        (h * w, 1), dtype=torch.float, device=device
++                    ).repeat(3, 1)
++                )
+         anchor_points = torch.cat(anchor_points)
+         stride_tensor = torch.cat(stride_tensor)
+         return anchor_points, stride_tensor
+@@ -55,8 +59,8 @@ def generate_anchors(feats, fpn_strides, grid_cell_size=5.0, grid_cell_offset=0.
+                 anchor_points.append(anchor_point.reshape([-1, 2]).repeat(3,1))
+             num_anchors_list.append(len(anchors[-1]))
+             stride_tensor.append(
+-                torch.full(
+-                    [num_anchors_list[-1], 1], stride, dtype=feats[0].dtype))
++                stride * torch.ones([num_anchors_list[-1], 1], dtype=feats[0].dtype)
++            )
+         anchors = torch.cat(anchors)
+         anchor_points = torch.cat(anchor_points).to(device)
+         stride_tensor = torch.cat(stride_tensor).to(device)
+diff --git a/yolov6/data/data_load.py b/yolov6/data/data_load.py
+index bc0fcff..d43de37 100644
+--- a/yolov6/data/data_load.py
++++ b/yolov6/data/data_load.py
+@@ -88,6 +88,7 @@ def create_dataloader(
+             sampler=sampler,
+             pin_memory=True,
+             collate_fn=TrainValDataset.collate_fn,
++            drop_last=True  # Owlite: Fixed batch size requirement for certain models (e.g. swin transformer)
+         ),
+         dataset,
+     )
+diff --git a/yolov6/layers/common.py b/yolov6/layers/common.py
+index c69d9d0..4d3d8b6 100644
+--- a/yolov6/layers/common.py
++++ b/yolov6/layers/common.py
+@@ -150,11 +150,9 @@ class CSPSPPFModule(nn.Module):
+     def forward(self, x):
+         x1 = self.cv4(self.cv3(self.cv1(x)))
+         y0 = self.cv2(x)
+-        with warnings.catch_warnings():
+-            warnings.simplefilter('ignore')
+-            y1 = self.m(x1)
+-            y2 = self.m(y1)
+-            y3 = self.cv6(self.cv5(torch.cat([x1, y1, y2, self.m(y2)], 1)))
++        y1 = self.m(x1)
++        y2 = self.m(y1)
++        y3 = self.cv6(self.cv5(torch.cat([x1, y1, y2, self.m(y2)], 1)))
+         return self.cv7(torch.cat((y0, y3), dim=1))
+ 
+ 
