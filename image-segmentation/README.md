@@ -1,6 +1,5 @@
 # OwLite Image Segmentation Example
 - Model : Deeplabv3_Resnet50  
-
 - Dataset : VOC2012 Dataset (Augmented)
 
 ## Prerequisites
@@ -38,7 +37,7 @@ wget https://www.dropbox.com/s/3eag5ojccwiexkq/best_deeplabv3_resnet50_voc_os16.
 ## How To Run
 ### Run baseline model
 ```
-python main.py --model deeplabv3_resnet50 --ckpt <checkpoint_path> --data_root <data_path> owlite --project <owlite_project_name> --baseline <owlite_baseline_name>
+python main.py --model deeplabv3_resnet50 --ckpt <checkpoint_path> --data_root <data_path> --gpu_id 0 owlite --project <owlite_project_name> --baseline <owlite_baseline_name>
 ```
 
 ### Run quantized model
@@ -46,10 +45,13 @@ python main.py --model deeplabv3_resnet50 --ckpt <checkpoint_path> --data_root <
 2. Run the code
     - For PTQ
         ```
-        python main.py --model deeplabv3_resnet50 --ckpt <checkpoint_path> --data_root <data_path> owlite --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --ptq
+        python main.py --model deeplabv3_resnet50 --ckpt <checkpoint_path> --data_root <data_path> --gpu_id 0 owlite --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --ptq
         ```
 
 ## Results
+
+<details>
+<summary>Deeplabv3_Resnet50</summary>
 
 ### Quantization Configuration
 - Apply OwLite Recommended Configuration with the following calibration method
@@ -75,6 +77,7 @@ Evaluation GPU: A6000
 | TensorRT FP16 | (16, 3, 513, 513) | 19.657
 | OwLite INT8 PTQ | (16, 3, 513, 513) | 9.823
 | TensorRT INT8 | (16, 3, 513, 513) | 9.830
+</details>
 
 ## Reference
 

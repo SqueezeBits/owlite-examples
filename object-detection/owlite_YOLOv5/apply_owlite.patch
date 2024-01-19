@@ -73,7 +73,7 @@ index 63f4a91..9567c4c 100644
  ultralytics>=8.0.147
  # protobuf<=3.20.1  # https://github.com/ultralytics/yolov5/issues/8012
 diff --git a/train.py b/train.py
-index 4c3bec3..67d9568 100644
+index 4c3bec3..aa3f6ea 100644
 --- a/train.py
 +++ b/train.py
 @@ -38,6 +38,7 @@ import torch.nn as nn
@@ -157,21 +157,20 @@ index 4c3bec3..67d9568 100644
          LOGGER.info('Using SyncBatchNorm()')
  
      # Trainloader
-@@ -211,26 +218,33 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -211,26 +218,32 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
      labels = np.concatenate(dataset.labels, 0)
      mlc = int(labels[:, 0].max())  # max label class
      assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 -
 +    
++    # OwLite Model Calibration
 +    if opt.owlite_ptq or opt.owlite_qat:
-+        # OwLite Model Calibration
-+        if owl.baseline_name != owl.experiment_name:  # Condition for quantization mode
-+            with owlite.calibrate(owlite_model) as calibrate_model:
-+                for i, (imgs, _, _, _) in enumerate(train_loader):
-+                    if i > 0 and i >= opt.owlite_calib_num // batch_size:
-+                        break
-+                    imgs = imgs.float()/255
-+                    calibrate_model(imgs.to(device))
++        with owlite.calibrate(owlite_model) as calibrate_model:
++            for i, (imgs, _, _, _) in enumerate(train_loader):
++                if i > 0 and i >= opt.owlite_calib_num // batch_size:
++                    break
++                imgs = imgs.float()/255
++                calibrate_model(imgs.to(device))
      # Process 0
      if RANK in {-1, 0}:
          val_loader = create_dataloader(val_path,
@@ -196,7 +195,7 @@ index 4c3bec3..67d9568 100644
  
          callbacks.run('on_pretrain_routine_end', labels, names)
  
-@@ -248,7 +262,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -248,7 +261,11 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
      model.hyp = hyp  # attach hyperparameters to model
      model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
      model.names = names
@@ -205,20 +204,19 @@ index 4c3bec3..67d9568 100644
 +    de_parallel(owlite_model).hyp = hyp  # attach hyperparameters to model
 +    de_parallel(owlite_model).class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
 +    de_parallel(owlite_model).names = names
++    
      # Start training
      t0 = time.time()
      nb = len(train_loader)  # number of batches
-@@ -266,13 +283,39 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -266,13 +283,37 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                  f'Using {train_loader.num_workers * WORLD_SIZE} dataloader workers\n'
                  f"Logging results to {colorstr('bold', save_dir)}\n"
                  f'Starting training for {epochs} epochs...')
 +    
 +    if opt.owlite_ptq or not opt.owlite_qat:
 +        # Benchmark the model using OwLite
-+        if isinstance(owlite_model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
-+            owl.benchmark(owlite_model.module)
-+        else:
-+            owl.benchmark(owlite_model)
++        owl.export(de_parallel(owlite_model))
++        owl.benchmark()
 +        results, _, _ = validate.run(
 +            data_dict,
 +            batch_size=batch_size // WORLD_SIZE,
@@ -250,7 +248,7 @@ index 4c3bec3..67d9568 100644
              iw = labels_to_image_weights(dataset.labels, nc=nc, class_weights=cw)  # image weights
              dataset.indices = random.choices(range(dataset.n), weights=iw, k=dataset.n)  # rand weighted idx
  
-@@ -314,7 +357,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -314,7 +355,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
  
              # Forward
              with torch.cuda.amp.autocast(amp):
@@ -259,7 +257,7 @@ index 4c3bec3..67d9568 100644
                  loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
                  if RANK != -1:
                      loss *= WORLD_SIZE  # gradient averaged between devices in DDP mode
-@@ -327,12 +370,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -327,12 +368,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
              # Optimize - https://pytorch.org/docs/master/notes/amp_examples.html
              if ni - last_opt_step >= accumulate:
                  scaler.unscale_(optimizer)  # unscale gradients
@@ -273,7 +271,7 @@ index 4c3bec3..67d9568 100644
                  last_opt_step = ni
  
              # Log
-@@ -341,7 +382,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -341,7 +380,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                  mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
                  pbar.set_description(('%11s' * 2 + '%11.4g' * 5) %
                                       (f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
@@ -282,7 +280,7 @@ index 4c3bec3..67d9568 100644
                  if callbacks.stop_training:
                      return
              # end batch ------------------------------------------------------------------------------------------------
-@@ -353,14 +394,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -353,14 +392,13 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
          if RANK in {-1, 0}:
              # mAP
              callbacks.run('on_train_epoch_end', epoch=epoch)
@@ -299,7 +297,7 @@ index 4c3bec3..67d9568 100644
                                                  single_cls=single_cls,
                                                  dataloader=val_loader,
                                                  save_dir=save_dir,
-@@ -381,9 +421,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -381,9 +419,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                  ckpt = {
                      'epoch': epoch,
                      'best_fitness': best_fitness,
@@ -310,18 +308,16 @@ index 4c3bec3..67d9568 100644
                      'optimizer': optimizer.state_dict(),
                      'opt': vars(opt),
                      'git': GIT_INFO,  # {remote, branch, commit} if a git repo
-@@ -413,14 +451,20 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -413,14 +449,18 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
          LOGGER.info(f'\n{epoch - start_epoch + 1} epochs completed in {(time.time() - t0) / 3600:.3f} hours.')
          for f in last, best:
              if f.exists():
 -                strip_optimizer(f)  # strip optimizers
                  if f is best:
-+                    owlite_model.load_state_dict(torch.load(f)['model'])
-+                    # Benchmark the model using OwLite
-+                    if isinstance(owlite_model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
-+                        owl.benchmark(owlite_model.module)
-+                    else:
-+                        owl.benchmark(owlite_model)
++                    # Export and Benchmark the model using OwLite
++                    de_parallel(owlite_model).load_state_dict(torch.load(f)['model'])
++                    owl.export(de_parallel(owlite_model))
++                    owl.benchmark()
                      LOGGER.info(f'\nValidating {f}...')
                      results, _, _ = validate.run(
                          data_dict,
@@ -334,7 +330,7 @@ index 4c3bec3..67d9568 100644
                          iou_thres=0.65 if is_coco else 0.60,  # best pycocotools at iou 0.65
                          single_cls=single_cls,
                          dataloader=val_loader,
-@@ -430,6 +474,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
+@@ -430,6 +470,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
                          plots=plots,
                          callbacks=callbacks,
                          compute_loss=compute_loss)  # val best model with plots
@@ -343,7 +339,7 @@ index 4c3bec3..67d9568 100644
                      if is_coco:
                          callbacks.run('on_fit_epoch_end', list(mloss) + list(results) + lr, epoch, best_fitness, fi)
  
-@@ -443,10 +489,10 @@ def parse_opt(known=False):
+@@ -443,10 +485,10 @@ def parse_opt(known=False):
      parser = argparse.ArgumentParser()
      parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
      parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
@@ -353,12 +349,12 @@ index 4c3bec3..67d9568 100644
 -    parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs, -1 for autobatch')
 +    parser.add_argument('--data', type=str, default=ROOT / 'data/coco.yaml', help='dataset.yaml path')
 +    parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch-owlite.yaml', help='hyperparameters path')
-+    parser.add_argument('--epochs', type=int, default=1, help='total training epochs')
++    parser.add_argument('--epochs', type=int, default=4, help='total training epochs')
 +    parser.add_argument('--batch-size', type=int, default=32, help='total batch size for all GPUs, -1 for autobatch')
      parser.add_argument('--imgsz', '--img', '--img-size', type=int, default=640, help='train, val image size (pixels)')
      parser.add_argument('--rect', action='store_true', help='rectangular training')
      parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
-@@ -481,6 +527,16 @@ def parse_opt(known=False):
+@@ -481,6 +523,16 @@ def parse_opt(known=False):
      parser.add_argument('--upload_dataset', nargs='?', const=True, default=False, help='Upload data, "val" option')
      parser.add_argument('--bbox_interval', type=int, default=-1, help='Set bounding-box image logging interval')
      parser.add_argument('--artifact_alias', type=str, default='latest', help='Version of dataset artifact to use')

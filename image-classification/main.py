@@ -229,8 +229,8 @@ def main_worker(gpu, ngpus_per_node, args, owl):
     if isinstance(model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
         model.module = owl.convert(model.module.eval(), example_input)
     else:
-        model = owl.convert(model.eval(), example_input)   
-    
+        model = owl.convert(model.eval(), example_input)
+
     # define loss function (criterion), optimizer, and learning rate scheduler
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -308,22 +308,21 @@ def main_worker(gpu, ngpus_per_node, args, owl):
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True, sampler=val_sampler, drop_last=True)
-    
-    if args.owlite_ptq or args.owlite_qat:
-        # Calibrate the model with OwLite
-        if owl.baseline_name != owl.experiment_name:  # Condition for quantization mode
-            with owlite.calibrate(model) as calibrate_model:
-                for i, (imgs, _) in enumerate(train_loader):
-                    if i > 0 and i >= args.owlite_calib_num // args.batch_size:
-                        break
-                    calibrate_model(imgs.to(device))
+    # Calibrate the model with OwLite
+    if args.owlite_ptq or args.owlite_qat: 
+        with owlite.calibrate(model) as calibrate_model:
+            for i, (imgs, _) in enumerate(train_loader):
+                if i > 0 and i >= args.owlite_calib_num // args.batch_size:
+                    break
+                calibrate_model(imgs.to(device))
 
     if args.evaluate or args.owlite_ptq:
         # Benchmark the model using OwLite
         if isinstance(model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
-            owl.benchmark(model.module)
+            owl.export(model.module)
         else:
-            owl.benchmark(model)
+            owl.export(model)
+        owl.benchmark()
         acc1 = validate(val_loader, model, criterion, args)
         owl.log(accuracy=acc1.item())
         return
@@ -358,9 +357,10 @@ def main_worker(gpu, ngpus_per_node, args, owl):
     model.load_state_dict(torch.load('model_best.pth.tar')['state_dict'])
     # Benchmark the model using OwLite
     if isinstance(model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
-        owl.benchmark(model.module)
+        owl.export(model.module)
     else:
-        owl.benchmark(model)
+        owl.export(model)
+    owl.benchmark()
     qat_acc1 = validate(val_loader, model, criterion, args)
     owl.log(accuracy=qat_acc1.item())
 

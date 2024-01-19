@@ -1,9 +1,9 @@
 diff --git a/main.py b/main.py
 new file mode 100644
-index 00000000..08730283
+index 00000000..5cae9799
 --- /dev/null
 +++ b/main.py
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,163 @@
 +import argparse
 +import random
 +import torch
@@ -82,12 +82,6 @@ index 00000000..08730283
 +        help="True if OwLite PTQ is applied",
 +    )
 +    owlite_parser.add_argument(
-+        "--qat",
-+        action="store_true",
-+        dest="owlite_qat",
-+        help="True if OwLite QAT is applied",
-+    )
-+    owlite_parser.add_argument(
 +        "--calib-num",
 +        type=int,
 +        default=256,
@@ -153,8 +147,8 @@ index 00000000..08730283
 +        mode="train",
 +    )
 +    
-+    if args.owlite_ptq and (owl.target.baseline != owl.target.name):
-+        # OwLite Model Calibration
++    # OwLite Model Calibration
++    if args.owlite_ptq:
 +        with owlite.calibrate(owlite_model) as calibrate_model:
 +            for i, batch in enumerate(train_loader):
 +                if i > 0 and i >= args.owlite_calib_num // args.batch_size:
@@ -164,7 +158,8 @@ index 00000000..08730283
 +    yolo.model = owlite_model
 +
 +    # Benchmark the model using OwLite
-+    owl.benchmark(owlite_model)
++    owl.export(owlite_model)
++    owl.benchmark()
 +    metrics = yolo.val(data=args.data_cfg, batch=args.batch_size, rect=False)
 +    owl.log(mAP=metrics.results_dict["metrics/mAP50-95(B)"])
 +    return

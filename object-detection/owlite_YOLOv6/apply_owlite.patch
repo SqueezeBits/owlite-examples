@@ -21,7 +21,7 @@ index 92f483d..29c5f28 100644
 +psutil
  # pytorch_quantization>=2.1.1
 diff --git a/tools/eval.py b/tools/eval.py
-index 5543029..a858168 100644
+index 5543029..69598ff 100644
 --- a/tools/eval.py
 +++ b/tools/eval.py
 @@ -5,6 +5,7 @@ import os
@@ -68,7 +68,7 @@ index 5543029..a858168 100644
          ):
      """ Run the evaluation process
  
-@@ -152,11 +169,39 @@ def run(data,
+@@ -152,11 +169,41 @@ def run(data,
                  specific_shape=specific_shape,height=height, width=width)
      model = val.init_model(model, weights, task)
      dataloader = val.init_data(dataloader, task)
@@ -87,18 +87,20 @@ index 5543029..a858168 100644
 +    example_input = torch.randn(batch_size, 3, 640, 640).to(device)
 +    model = owl.convert(model.eval(), example_input)
 +    
++    # OwLite Model Calibration
 +    if owlite_ptq:
-+        # Calibrate the model with OwLite
-+        if owl.baseline_name != owl.experiment_name:  # Condition for quantization mode
-+            with owlite.calibrate(model) as calibrate_model:
-+                for i, (imgs, _, _, _) in enumerate(train_loader):
-+                    if i > 0 and i >= owlite_calib_num // batch_size:
-+                        break
-+                    imgs = imgs.float()/255
-+                    calibrate_model(imgs.to(device))
++        with owlite.calibrate(model) as calibrate_model:
++            for i, (imgs, _, _, _) in enumerate(train_loader):
++                if i > 0 and i >= owlite_calib_num // batch_size:
++                    break
++                imgs = imgs.float()/255
++                calibrate_model(imgs.to(device))
++
++    # Export the model using OwLite
++    owl.export(model)
 +
 +    # Benchmark the model using OwLite
-+    owl.benchmark(model)
++    owl.benchmark()
  
      # eval
      model.eval()

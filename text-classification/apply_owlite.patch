@@ -1,3 +1,329 @@
+diff --git a/examples/pytorch/text-classification/run_glue.py b/examples/pytorch/text-classification/run_glue.py
+index 67f73dfc6..32572afd3 100755
+--- a/examples/pytorch/text-classification/run_glue.py
++++ b/examples/pytorch/text-classification/run_glue.py
+@@ -46,13 +46,18 @@ from transformers import (
+ from transformers.trainer_utils import get_last_checkpoint
+ from transformers.utils import check_min_version, send_example_telemetry
+ from transformers.utils.versions import require_version
++from transformers.models.bert.modeling_bert import BertForSequenceClassificationWrapper
+ 
++import owlite
++import torch, gc
+ 
+ # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+-check_min_version("4.34.0")
++check_min_version("4.33.0")
+ 
+ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+ 
++os.environ["WANDB_DISABLED"] = "true"
++
+ task_to_keys = {
+     "cola": ("sentence", None),
+     "mnli": ("premise", "hypothesis"),
+@@ -219,20 +224,72 @@ class ModelArguments:
+         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
+     )
+ 
++@dataclass
++class OwliteArguments:
++    """
++    Arguments for owlite setting
++    """
++    project: str = field(
++        default=None,
++        metadata={
++            "help": "Owlite project name"
++        },
++    )
++    baseline: str = field(
++        default=None,
++        metadata={
++            "help": "Owlite baseline name"
++        },
++    )
++    experiment: str = field(
++        default=None,
++        metadata={
++            "help": "Owlite baseline name"
++        },
++    )
++    duplicate_from: str = field(
++        default=None, 
++        metadata={
++            "help": "The name of Owlite experiment where the config to be duplicated is located"
++        },
++    )
++    calib_num: Optional[int] = field(
++        default=256,
++        metadata={
++            "help": "Number of data to use for Owlite calibration"
++        },
++    )
++    do_finetuning: bool = field(
++        default=False,
++        metadata={
++            "help": "True if finetuning the model with specific dataset"
++        },
++    )
++    ptq: bool = field(
++        default=False,
++        metadata={
++            "help": "True if Owlite PTQ is applied"
++        },
++    )
++    qat: bool = field(
++        default=False,
++        metadata={
++            "help": "True if Owlite QAT is applied"
++        },
++    )
+ 
+ def main():
+     # See all possible arguments in src/transformers/training_args.py
+     # or by passing the --help flag to this script.
+     # We now keep distinct sets of args, for a cleaner separation of concerns.
+ 
+-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
++    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments, OwliteArguments))
+     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+         # If we pass only one argument to the script and it's the path to a json file,
+         # let's parse it to get our arguments.
+-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
++        model_args, data_args, training_args, owlite_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+     else:
+-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+-
++        model_args, data_args, training_args, owlite_args = parser.parse_args_into_dataclasses()
+     if model_args.use_auth_token is not None:
+         warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+         if model_args.token is not None:
+@@ -395,6 +452,16 @@ def main():
+         token=model_args.token,
+         trust_remote_code=model_args.trust_remote_code,
+     )
++
++    # set problem_type of model configuration depending on is_regression and label type.
++    if is_regression:
++        config.problem_type = "regression"
++    else:
++        if raw_datasets["train"].features["label"].dtype in ["float32", "float64"]:
++            config.problem_type = "multi_label_classification"
++        else:
++            config.problem_type = "single_label_classification"
++    
+     model = AutoModelForSequenceClassification.from_pretrained(
+         model_args.model_name_or_path,
+         from_tf=bool(".ckpt" in model_args.model_name_or_path),
+@@ -480,13 +547,11 @@ def main():
+             load_from_cache_file=not data_args.overwrite_cache,
+             desc="Running tokenizer on dataset",
+         )
+-    if training_args.do_train:
+-        if "train" not in raw_datasets:
+-            raise ValueError("--do_train requires a train dataset")
+-        train_dataset = raw_datasets["train"]
+-        if data_args.max_train_samples is not None:
+-            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+-            train_dataset = train_dataset.select(range(max_train_samples))
++
++    train_dataset = raw_datasets["train"]
++    if data_args.max_train_samples is not None:
++        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
++        train_dataset = train_dataset.select(range(max_train_samples))
+ 
+     if training_args.do_eval:
+         if "validation" not in raw_datasets and "validation_matched" not in raw_datasets:
+@@ -505,9 +570,8 @@ def main():
+             predict_dataset = predict_dataset.select(range(max_predict_samples))
+ 
+     # Log a few random samples from the training set:
+-    if training_args.do_train:
+-        for index in random.sample(range(len(train_dataset)), 3):
+-            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
++    for index in random.sample(range(len(train_dataset)), 3):
++        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+ 
+     # Get the metric function
+     if data_args.task_name is not None:
+@@ -540,15 +604,52 @@ def main():
+     trainer = Trainer(
+         model=model,
+         args=training_args,
+-        train_dataset=train_dataset if training_args.do_train else None,
++        train_dataset=train_dataset,
+         eval_dataset=eval_dataset if training_args.do_eval else None,
+         compute_metrics=compute_metrics,
+         tokenizer=tokenizer,
+         data_collator=data_collator,
+     )
+ 
+-    # Training
+-    if training_args.do_train:
++    if not owlite_args.do_finetuning:
++        # init OwLite
++        owl = owlite.init(
++            project=owlite_args.project, 
++            baseline=owlite_args.baseline, 
++            experiment=owlite_args.experiment, 
++            duplicate_from=owlite_args.duplicate_from
++        )
++        data_loader = trainer.get_train_dataloader()
++        if owlite_args.calib_num > len(data_loader):
++            owlite_args.calib_num = len(data_loader)
++
++        loss_function = model.loss_fct
++
++        # Run OwLite convert
++        for calib_step, calib_data in enumerate(data_loader):
++            calib_data.pop('labels')
++            model = owl.convert(trainer.model, **calib_data, return_dict=False)
++            break
++        
++        # Run post-training quantization with calibration dataset
++        # only if owlite_args.ptq or owlite_args.qat is true
++        if owlite_args.ptq or owlite_args.qat:
++            with owlite.calibrate(model) as calibrate_model:
++                for calib_step, calib_data in enumerate(data_loader):
++                    calib_data.pop('labels')
++                    calibrate_model(**calib_data)
++                    if (calib_step + 1) * training_args.per_device_train_batch_size >=  owlite_args.calib_num:
++                        break
++        
++        # set model in trainer class to a custom BertForSequenceClassification wrapper 
++        # to fully utilize the features of huggingface trainer
++
++        trainer.model = BertForSequenceClassificationWrapper(model, num_labels, loss_function)
++
++        # save the model after calibration
++        trainer.save_model()
++    # Run finetuning or quantization-aware training
++    if owlite_args.qat or owlite_args.do_finetuning:
+         checkpoint = None
+         if training_args.resume_from_checkpoint is not None:
+             checkpoint = training_args.resume_from_checkpoint
+@@ -567,66 +668,48 @@ def main():
+         trainer.save_metrics("train", metrics)
+         trainer.save_state()
+ 
+-    # Evaluation
+-    if training_args.do_eval:
+-        logger.info("*** Evaluate ***")
+-
+-        # Loop to handle MNLI double evaluation (matched, mis-matched)
+-        tasks = [data_args.task_name]
+-        eval_datasets = [eval_dataset]
+-        if data_args.task_name == "mnli":
+-            tasks.append("mnli-mm")
+-            valid_mm_dataset = raw_datasets["validation_mismatched"]
+-            if data_args.max_eval_samples is not None:
+-                max_eval_samples = min(len(valid_mm_dataset), data_args.max_eval_samples)
+-                valid_mm_dataset = valid_mm_dataset.select(range(max_eval_samples))
+-            eval_datasets.append(valid_mm_dataset)
+-            combined = {}
+-
+-        for eval_dataset, task in zip(eval_datasets, tasks):
+-            metrics = trainer.evaluate(eval_dataset=eval_dataset)
+-
+-            max_eval_samples = (
+-                data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+-            )
+-            metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+-
+-            if task == "mnli-mm":
+-                metrics = {k + "_mm": v for k, v in metrics.items()}
+-            if task is not None and "mnli" in task:
+-                combined.update(metrics)
+-
+-            trainer.log_metrics("eval", metrics)
+-            trainer.save_metrics("eval", combined if task is not None and "mnli" in task else metrics)
+-
+-    if training_args.do_predict:
+-        logger.info("*** Predict ***")
+-
+-        # Loop to handle MNLI double evaluation (matched, mis-matched)
+-        tasks = [data_args.task_name]
+-        predict_datasets = [predict_dataset]
+-        if data_args.task_name == "mnli":
+-            tasks.append("mnli-mm")
+-            predict_datasets.append(raw_datasets["test_mismatched"])
+-
+-        for predict_dataset, task in zip(predict_datasets, tasks):
+-            # Removing the `label` columns because it contains -1 and Trainer won't like that.
+-            predict_dataset = predict_dataset.remove_columns("label")
+-            predictions = trainer.predict(predict_dataset, metric_key_prefix="predict").predictions
+-            predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
+-
+-            output_predict_file = os.path.join(training_args.output_dir, f"predict_results_{task}.txt")
+-            if trainer.is_world_process_zero():
+-                with open(output_predict_file, "w") as writer:
+-                    logger.info(f"***** Predict results {task} *****")
+-                    writer.write("index\tprediction\n")
+-                    for index, item in enumerate(predictions):
+-                        if is_regression:
+-                            writer.write(f"{index}\t{item:3.3f}\n")
+-                        else:
+-                            item = label_list[item]
+-                            writer.write(f"{index}\t{item}\n")
++    # Evaluate the quantized model
++    # after post-training quantization or quantization-aware training
++    logger.info("*** Evaluate ***")
++
++    # Loop to handle MNLI double evaluation (matched, mis-matched)
++    tasks = [data_args.task_name]
++    eval_datasets = [eval_dataset]
++    if data_args.task_name == "mnli":
++        tasks.append("mnli-mm")
++        valid_mm_dataset = raw_datasets["validation_mismatched"]
++        if data_args.max_eval_samples is not None:
++            max_eval_samples = min(len(valid_mm_dataset), data_args.max_eval_samples)
++            valid_mm_dataset = valid_mm_dataset.select(range(max_eval_samples))
++        eval_datasets.append(valid_mm_dataset)
++        combined = {}
+ 
++    for eval_dataset, task in zip(eval_datasets, tasks):
++        metrics = trainer.evaluate(eval_dataset=eval_dataset)
++
++        max_eval_samples = (
++            data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
++        )
++        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
++
++        if task == "mnli-mm":
++            metrics = {k + "_mm": v for k, v in metrics.items()}
++        if task is not None and "mnli" in task:
++            combined.update(metrics)
++
++        trainer.log_metrics("eval", metrics)
++        trainer.save_metrics("eval", combined if task is not None and "mnli" in task else metrics)
++    
++    if not owlite_args.do_finetuning:
++        # add one of {eval_accuracy, eval_spearmanr, and eval_matthews_correlation} to OwLite log
++        for metrics_key, metrics_value in metrics.items():
++            if metrics_key.replace("eval_","") in ["accuracy", "spearmanr", "matthews_correlation"]:
++                owl.log(metrics=metrics_value)
++                break
++        # benchmark OwLite
++        owl.export(model)
++        owl.benchmark()
++    
+     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
+     if data_args.task_name is not None:
+         kwargs["language"] = "en"
+diff --git a/owlite_run_glue.py b/owlite_run_glue.py
+new file mode 100644
+index 000000000..75daedaee
+--- /dev/null
++++ b/owlite_run_glue.py
+@@ -0,0 +1,6 @@
++import sys
++sys.path.append("./examples/pytorch/text-classification")
++from run_glue import main as run_glue_main
++
++if __name__ == "__main__":
++    run_glue_main()
+\ No newline at end of file
 diff --git a/src/transformers/models/bert/modeling_bert.py b/src/transformers/models/bert/modeling_bert.py
 index 29846b805..e3f1eac80 100755
 --- a/src/transformers/models/bert/modeling_bert.py

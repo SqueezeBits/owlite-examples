@@ -1,4 +1,6 @@
 # OwLite Object Detection Example 
+- Model: YOLOv6-S
+- Dataset: COCO'17 Dataset
 
 ## Prerequisites
 
@@ -43,6 +45,8 @@ CUDA_VISIBLE_DEVICES=0 python tools/eval.py --specific-shape owlite --project <o
 
 ## Results
 
+<details>
+<summary>YOLOv6-S</summary>
 ### Quantization Configuration
 
 - Apply OwLite Recommended Config with the following calibration method
@@ -55,7 +59,7 @@ CUDA_VISIBLE_DEVICES=0 python tools/eval.py --specific-shape owlite --project <o
 | --------------- |:-----------------:|:-----------------:|:------------:|
 | FP32            | (32, 3, 640, 640) | 44.7              | 61.6         |
 | OwLite INT8 PTQ | (32, 3, 640, 640) | 41.9              | 58.1         |
-| INT8 TensorRT   | (32, 3, 640, 640) | 7.3               | 11.3         |
+| INT8 TensorRT   | (32, 3, 640, 640) | 41.0              | 57.5         |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
 
@@ -67,7 +71,7 @@ TensorRT Evaluation GPU: A6000
 | FP16 TensorRT   | (32, 3, 640, 640) | 17.3             |
 | OwLite INT8 PTQ | (32, 3, 640, 640) | 8.6              |
 | INT8 TensorRT   | (32, 3, 640, 640) | 8.7              | 
-
+</details>
 
 ## Reference
-https://github.com/meituan/YOLOv6.git
+https://github.com/meituan/YOLOv6

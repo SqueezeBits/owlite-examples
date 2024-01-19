@@ -28,13 +28,13 @@ class Exp(MyExp):
         self.warmup_lr = 0
         self.min_lr_ratio = 0.05
         # learning rate for one image. During training, lr will multiply batchsize.
-        self.basic_lr_per_img = 1e-4 / 64.0
+        self.basic_lr_per_img = 2.4e-4
         
         # weight decay
-        self.weight_decay = 0.
+        self.weight_decay = 3e-5
 
         # name of LRScheduler
-        self.scheduler = "constant"
+        self.scheduler = "cos"
 
         # last #epoch to close augmentation like mosaic
         self.no_aug_epochs = 0
@@ -45,7 +45,7 @@ class Exp(MyExp):
         # confidence threshold during evaluation/test,
         # boxes whose scores are less than test_conf will be filtered
         self.test_conf = 0.001
-    
+
     def get_optimizer(self, batch_size):
         if "optimizer" not in self.__dict__:
             if self.warmup_epochs > 0:

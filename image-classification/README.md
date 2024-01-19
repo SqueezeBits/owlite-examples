@@ -69,7 +69,7 @@ python main.py -a resnet18 --data ~/datasets/imagenet --pretrained --evaluate ow
 - Apply OwLite Recommended Config with the following calibration method
   - PTQ calibration: AbsMax
   - QAT backward: CLQ
-  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+  - Gradient scales for weight quantization in {Conv, Gemm} were set to 0.01
 
 #### Training Configuration
 
@@ -109,7 +109,7 @@ TensorRT Evaluation GPU: A6000
 - Apply OwLite Recommended Config with the following calibration method
   - PTQ calibration: AbsMax
   - QAT backward: CLQ
-  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+  - Gradient scales for weight quantization in {Conv, Gemm} were set to 0.01
 
 #### Training Configuration
 
@@ -148,11 +148,11 @@ TensorRT Evaluation GPU: A6000
 - Apply OwLite Recommended Config with the following calibration method
   - PTQ calibration: Percentile (99.99)
   - QAT backward: CLQ
-  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+  - Gradient scales for weight quantization in {Conv, Gemm} were set to 0.01
 
 #### Training Configuration
 
-- Learning Rate: 1e-5
+- Learning Rate: 2e-5
 - Weight Decay: 1e-5
 - Epochs: 1
   
@@ -190,17 +190,17 @@ TensorRT Evaluation GPU: A6000
 
 #### Training Configuration
 
-- Learning Rate: 1e-5
+- Learning Rate: 2e-5
 - Weight Decay: 1e-5
-- Epochs: 2
+- Epochs: 5
   
 ### Accuracy Results
 
 | Quantization    | Input Size         | Top 1 Acc (%) | Top 5 Acc (%) |   
 | --------------- |:------------------:|:-------------:|:-------------:|
 | FP32            | (256, 3, 224, 224) | 74.0          | 91.3          |
-| Owlite INT8 PTQ | (256, 3, 224, 224) | 71.6          | 90.1          |
-| Owlite INT8 QAT | (256, 3, 224, 224) | 72.3          | 90.5          |
+| OwLite INT8 PTQ | (256, 3, 224, 224) | 71.6          | 90.1          |
+| OwLite INT8 QAT | (256, 3, 224, 224) | 72.9          | 90.7          |
 | INT8 TensorRT   | (256, 3, 224, 224) | 71.4          | 90.0          |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
@@ -211,7 +211,7 @@ TensorRT Evaluation GPU: A6000
 | Quantization    | Input Size         | GPU Latency (ms) | 
 | --------------- |:------------------:|:----------------:|
 | FP16 TensorRT   | (256, 3, 640, 640) | 11.84            |
-| Owlite INT8     | (256, 3, 640, 640) | 6.77             |
+| OwLite INT8     | (256, 3, 640, 640) | 6.77             |
 | INT8 TensorRT   | (256, 3, 640, 640) | 6.82             |
 </details>
 
@@ -223,9 +223,9 @@ TensorRT Evaluation GPU: A6000
 #### Quantization Configuration
 
 - Apply OwLite Recommended Config with the following calibration method
-  - PTQ calibration: MSE
+  - PTQ calibration: MSE for weight quantization in {Conv, Gemm}, Percentile (99.9) for activation quantization  
   - QAT backward: CLQ
-  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+  - Gradient scales for weight quantization in {Conv, Gemm} were set to 0.01
 
 #### Training Configuration
 
@@ -238,7 +238,7 @@ TensorRT Evaluation GPU: A6000
 | Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) |   
 | --------------- |:-----------------:|:-------------:|:-------------:|
 | FP32            | (64, 3, 224, 224) | 77.7          | 93.6          |
-| OwLite INT8 PTQ | (64, 3, 224, 224) | 49.9          | 74.1          |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 73.3          | 91.4          |
 | OwLite INT8 QAT | (64, 3, 224, 224) | 76.6          | 93.1          |
 | INT8 TensorRT   | (64, 3, 224, 224) | 72.2          | 91.0          |
 
@@ -263,13 +263,13 @@ TensorRT Evaluation GPU: A6000
 #### Quantization Configuration
 
 - Apply OwLite Recommended Config with the following calibration method
-  - PTQ calibration: MSE
+  - PTQ calibration: Percentile (99.99)
   - QAT backward: CLQ
-  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+  - Gradient scales for weight quantization in {Conv, Gemm} were set to 0.01
 
 #### Training Configuration
 
-- Learning Rate: 5e-5
+- Learning Rate: 2e-5
 - Weight Decay: 1e-5
 - Epochs: 2
 
@@ -278,8 +278,8 @@ TensorRT Evaluation GPU: A6000
 | Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) |   
 | --------------- |:-----------------:|:-------------:|:-------------:|
 | FP32            | (64, 3, 224, 224) | 81.3          | 95.3          |
-| OwLite INT8 PTQ | (64, 3, 224, 224) | 10.8          | 24.6          |
-| OwLite INT8 QAT | (64, 3, 224, 224) | 81.0          | 95.2          |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 80.3          | 94.9          |
+| OwLite INT8 QAT | (64, 3, 224, 224) | 81.1          | 95.4          |
 | INT8 TensorRT   | (64, 3, 224, 224) | 80.2          | 95.0          |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
@@ -318,8 +318,8 @@ TensorRT Evaluation GPU: A6000
 | Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) |   
 | --------------- |:-----------------:|:-------------:|:-------------:|
 | FP32            | (64, 3, 224, 224) | 83.2          | 96.5          |
-| OwLite INT8 PTQ | (64, 3, 224, 224) | 82.5          | 96.1          |
-| OwLite INT8 QAT | (64, 3, 224, 224) | 82.3          | 95.6          |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 82.9          | 96.1          |
+| OwLite INT8 QAT | (64, 3, 224, 224) | 83.0          | 96.3          |
 | INT8 TensorRT   | (64, 3, 224, 224) | 83.2          | 96.5          |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
@@ -330,7 +330,7 @@ TensorRT Evaluation GPU: A6000
 | Quantization    | Input Size        | GPU Latency (ms) | 
 | --------------- |:-----------------:|:----------------:|
 | FP16 TensorRT   | (64, 3, 224, 224) | 81.9             |
-| OwLite INT8     | (64, 3, 224, 224) | 51.0             |
+| OwLite INT8     | (64, 3, 224, 224) | 56.7             |
 | INT8 TensorRT   | (64, 3, 224, 224) | 80.7             |
 
 </details>

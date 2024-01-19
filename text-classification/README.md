@@ -23,63 +23,60 @@
     patch -p1 < ../apply_owlite.patch
 
     pip install -e .
-    cd ..
     ```
 ## How to Run
 
 ### 1. Finetune pretrained languange model 
 
-    CUDA_VISIBLE_DEVICES=0 python run_glue.py --model_name_or_path bert-base-cased --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 32 --learning_rate 2e-5 --num_train_epochs 3 --output_dir <finetuned_model_dir> --do_finetuning
+    CUDA_VISIBLE_DEVICES=0 python owlite_run_glue.py --model_name_or_path bert-base-cased --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 32 --learning_rate 2e-5 --num_train_epochs 3 --output_dir <finetuned_model_dir> --do_finetuning
 
 - For wnli, you use the --learning_rate=5e-6 instead of 2e-5.
     <task_name> is one of {mrpc, cola, stsb, wnli, qqp, sst2, mnli, qnli, rte}.
 
 ### 2. Run baseline model
-    CUDA_VISIBLE_DEVICES=0 python run_glue.py --model_name_or_path <finetuned_model_dir> --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --output_dir <finetuned_model_dir> --dataloader_drop_last true --project <owlite_project_name> --baseline <owlite_baseline_name>
+    CUDA_VISIBLE_DEVICES=0 python owlite_run_glue.py --model_name_or_path <finetuned_model_dir> --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --output_dir <output_dir> --dataloader_drop_last true --project <owlite_project_name> --baseline <owlite_baseline_name>
 
 ### 3-1. Run post-training quantization (PTQ)
     
-    CUDA_VISIBLE_DEVICES=0 python run_glue.py --model_name_or_path <finetuned_model_dir> --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --output_dir <output_dir> --dataloader_drop_last true --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --ptq
+    CUDA_VISIBLE_DEVICES=0 python owlite_run_glue.py --model_name_or_path <finetuned_model_dir> --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --output_dir <output_dir> --dataloader_drop_last true --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --ptq
     
 ### 3-2. Run quantization-aware training (QAT)
     
-    CUDA_VISIBLE_DEVICES=0 python run_glue.py --model_name_or_path <finetuned_model_dir> --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --learning_rate 2e-5 --output_dir <output_dir> --dataloader_drop_last true --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --qat
+    CUDA_VISIBLE_DEVICES=0 python owlite_run_glue.py --model_name_or_path <finetuned_model_dir> --task_name <task_name> --do_eval --max_seq_length 128 --per_device_train_batch_size 8 --per_device_eval_batch_size 8 --output_dir <output_dir> --dataloader_drop_last true --learning_rate 1e-6 --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --qat
     
 ## Results
 
 ### Quantization Configuration
 
 - Apply OwLite Recommended Config with the following calibration method
-    - PTQ calibration: 
-        - MSE for MRPC task
-        - Percentile (99.99%) for other tasks
+    - PTQ calibration: Require to find the optimal calibration method for each node.
     - QAT backward: CLQ
     - Hyperparameter setting for QAT
-        - learning_rate: 
-            - 1e-4 for CoLA task
-            - 5e-4 for MRPC task
-            - 5e-6 for other tasks
-        - weight_decay: 0.0
-        - num_train_epochs
-            - 10 for MRPC task
+        - learning_rate:
+            - 1e-7 for RTE task
+            - 5e-6 for SST-2, STS-B, WNLI tasks
+            - 1e-6 for other tasks
+        - num_train_epochs:
+            - 10 for CoLA task
+            - 5 for QQP, QNLI tasks
             - 3 for other tasks
     
 ### GLUE Results
 
-| Quantization    | Input Size        | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (F1/Acc.)| MNLI (Matched/Mismatched Acc.) | QNLI | RTE | WNLI |  
-| --------------- |:-----------------:|:-----------------:|:------------:|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|
-| FP32            | (8x128) | 61.13 | 90.83 | 84.56/89.04 | 89.30/88.96 | 87.21/90.56 | 83.87/84.40 | 90.72 | 65.43 | 57.14 | 
-| OwLite INT8 PTQ | (8x128) | 57.17 | 91.17 | 68.38/71.90 | 86.58/88.97 | 85.78/88.86 | 82.43/82.46 | 87.90 | 63.57 | 57.14 | 
-| OwLite INT8 QAT | (8x128) | 57.24 | 91.17 | 78.43/83.94 | 87.49/86.92 | 85.88/88.83 | 83.04/82.76 | 88.03 | 63.94 | 57.14 | 
+| Quantization    | Input Size | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (Acc./F1)| MNLI (Matched/Mismatched Acc.) | QNLI  | RTE   | WNLI  |  
+| --------------- |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|
+| FP32            | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 
+| OwLite INT8 PTQ | (8x128)    | 59.25                 | 91.17 | 82.35/87.67    | 86.54/86.56                   | 89.06/85.72  | 83.00/82.57                    | 89.50 | 65.06 | 57.14 | 
+| OwLite INT8 QAT | (8x128)    | 59.63                 | 91.17 | 84.07/88.85    | 86.95/87.05                   | 88.90/85.86  | 82.95/83.12                    | 89.59 | 65.06 | 57.14 | 
 
 
 ### Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | Latency (ms) |  
-| --------------- |:-----------------:|:-----------------:|
-| FP16 TensorRT   | (8x128) | 2.32 |
-| OwLite INT8     | (8x128) | 1.66 |
+| Quantization    | Input Size | Latency (ms) |  
+| --------------- |:----------:|:------------:|
+| FP16 TensorRT   | (8x128)    | 2.32         |
+| OwLite INT8     | (8x128)    | 1.65         |
 
 ### References
 https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification
