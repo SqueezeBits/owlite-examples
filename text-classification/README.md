@@ -53,22 +53,18 @@
     - QAT backward: CLQ
     - Hyperparameter setting for QAT
         - learning_rate:
-            - 1e-7 for RTE task
-            - 5e-6 for SST-2, STS-B, WNLI tasks
-            - 1e-6 for other tasks
+            - 5e-6 for STS-B task
+            - 1e-6 for CoLA, MRPC, and MNLI tasks
         - num_train_epochs:
             - 10 for CoLA task
-            - 5 for QQP, QNLI tasks
-            - 3 for other tasks
+            - 3 for MRPC, STS-B, and MNLI tasks
     
 ### GLUE Results
 
-| Quantization    | Input Size | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (Acc./F1)| MNLI (Matched/Mismatched Acc.) | QNLI  | RTE   | WNLI  |  
-| --------------- |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|
-| FP32            | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 
-| OwLite INT8 PTQ | (8x128)    | 59.25                 | 91.17 | 82.35/87.67    | 86.54/86.56                   | 89.06/85.72  | 83.00/82.57                    | 89.50 | 65.06 | 57.14 | 
-| OwLite INT8 QAT | (8x128)    | 59.63                 | 91.17 | 84.07/88.85    | 86.95/87.05                   | 88.90/85.86  | 82.95/83.12                    | 89.59 | 65.06 | 57.14 | 
-
+| Quantization | Input Size | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (Acc./F1)| MNLI (Matched/Mismatched Acc.) | QNLI  | RTE   | WNLI  |  
+| ------------ |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|
+| FP32         | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 
+| OwLite INT8  | (8x128)    | 57.33                 | 91.17 | 83.33/88.36    | 87.58/87.33                   | 89.25/86.01  | 83.22/83.41                    | 89.44 | 63.20 | 57.14 | 
 
 ### Latency Results
 TensorRT Evaluation GPU: A6000

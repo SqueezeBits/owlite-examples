@@ -7,13 +7,14 @@
 - [OwLite How-to-use](https://squeezebits.gitbook.io/owlite/user-guide/how-to-use)
 - [OwLite Web UI](https://squeezebits.gitbook.io/owlite/user-guide/web-ui)
 
-This repository is tested on ```PyTorch>=2.1.1``` and ```OwLite v1.1```.
+This repository is tested on ```PyTorch>=2.0,<=2.1``` and ```OwLite v1.2```.
 
 ## Environment setup
 
     git clone https://github.com/SqueezeBits/owlite-examples.git
     git submodule init
     git submodule update --recursive 
+    pip install -r requirements.txt
 
 ## Available tasks
 - [Image classification](image-classification/README.md)

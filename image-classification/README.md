@@ -1,5 +1,5 @@
 # OwLite Image Classification Example 
-- Model : ResNet18, ResNet50, MobileNet-V2, MobileNet-V3-Large, EfficientNet-B0, EfficientNet-V2-S, Swin-B
+- Model : ResNet18, ResNet50, MobileNet-V2, MobileNet-V3-Large, EfficientNet-B0, EfficientNet-V2-S, Swin-B, ViT-B-16
 - Dataset : ImageNet Dataset
 
 
@@ -15,11 +15,7 @@ Download ImageNet dataset referring to the [README](https://github.com/pytorch/e
     conda create -n <env_name> python=3.10 -y
     conda activate <env_name>
     ```
-2. install required packages
-    ```
-    pip install -r requirements.txt
-    ```
-3. install OwLite package
+2. install OwLite package
     ```
     pip install --extra-index-url https://pypi.ngc.nvidia.com git+https://github.com/SqueezeBits/owlite
     ```
@@ -187,6 +183,7 @@ TensorRT Evaluation GPU: A6000
 - Apply Owlite Recommended Config with the following calibration method
   - PTQ calibration: Percentile (99.99)
   - QAT backward: CLQ
+  - Gradient scales for weight quantization in {Conv, Gemm} were set to 0.01
 
 #### Training Configuration
 
@@ -231,15 +228,15 @@ TensorRT Evaluation GPU: A6000
 
 - Learning Rate: 5e-5
 - Weight Decay: 1e-5
-- Epochs: 5
+- Epochs: 10
 
 ### Accuracy Results
 
 | Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) |   
 | --------------- |:-----------------:|:-------------:|:-------------:|
 | FP32            | (64, 3, 224, 224) | 77.7          | 93.6          |
-| OwLite INT8 PTQ | (64, 3, 224, 224) | 73.3          | 91.4          |
-| OwLite INT8 QAT | (64, 3, 224, 224) | 76.6          | 93.1          |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 73.7          | 91.7          |
+| OwLite INT8 QAT | (64, 3, 224, 224) | 76.1          | 92.9          |
 | INT8 TensorRT   | (64, 3, 224, 224) | 72.2          | 91.0          |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
@@ -318,8 +315,8 @@ TensorRT Evaluation GPU: A6000
 | Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) |   
 | --------------- |:-----------------:|:-------------:|:-------------:|
 | FP32            | (64, 3, 224, 224) | 83.2          | 96.5          |
-| OwLite INT8 PTQ | (64, 3, 224, 224) | 82.9          | 96.1          |
-| OwLite INT8 QAT | (64, 3, 224, 224) | 83.0          | 96.3          |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 82.9          | 96.4          |
+| OwLite INT8 QAT | (64, 3, 224, 224) | 82.9          | 96.4          |
 | INT8 TensorRT   | (64, 3, 224, 224) | 83.2          | 96.5          |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
@@ -332,6 +329,46 @@ TensorRT Evaluation GPU: A6000
 | FP16 TensorRT   | (64, 3, 224, 224) | 81.9             |
 | OwLite INT8     | (64, 3, 224, 224) | 56.7             |
 | INT8 TensorRT   | (64, 3, 224, 224) | 80.7             |
+
+</details>
+
+<details>
+<summary>ViT-B-16</summary>
+
+### Configuration
+
+#### Quantization Configuration
+
+- Apply OwLite Recommended Config with the following calibration method
+  - PTQ calibration: MSE
+  - QAT backward: CLQ
+  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+
+#### Training Configuration
+
+- Learning Rate: 5e-6
+- Weight Decay: 1e-5
+- Epochs: 1
+
+### Accuracy Results
+
+| Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) |   
+| --------------- |:-----------------:|:-------------:|:-------------:|
+| FP32            | (64, 3, 224, 224) | 81.1          | 95.3          |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 80.4          | 95.1          |
+| OwLite INT8 QAT | (64, 3, 224, 224) | 80.6          | 95.2          |
+| INT8 TensorRT   | (64, 3, 224, 224) | 81.1          | 95.3          |
+
+- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
+
+### Latency Results
+TensorRT Evaluation GPU: A6000
+
+| Quantization    | Input Size        | GPU Latency (ms) | 
+| --------------- |:-----------------:|:----------------:|
+| FP16 TensorRT   | (64, 3, 224, 224) | 31.2             |
+| OwLite INT8     | (64, 3, 224, 224) | 20.1             |
+| INT8 TensorRT   | (64, 3, 224, 224) | 31.2             |
 
 </details>
 

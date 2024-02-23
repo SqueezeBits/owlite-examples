@@ -58,7 +58,7 @@ CUDA_VISIBLE_DEVICES=0 python tools/eval.py --specific-shape owlite --project <o
 | Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) |   
 | --------------- |:-----------------:|:-----------------:|:------------:|
 | FP32            | (32, 3, 640, 640) | 44.7              | 61.6         |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 41.9              | 58.1         |
+| OwLite INT8 PTQ | (32, 3, 640, 640) | 41.8              | 58.0         |
 | INT8 TensorRT   | (32, 3, 640, 640) | 41.0              | 57.5         |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)

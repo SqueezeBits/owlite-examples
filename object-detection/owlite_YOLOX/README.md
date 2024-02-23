@@ -66,10 +66,10 @@ CUDA_VISIBLE_DEVICES=0 python -m tools.eval -n yolox-s -c yolox_s.pth -b 64 -d 1
 
 | Quantization    | Input Size        | mAP 0.50~0.95 (%) |
 | --------------- |:-----------------:|:-----------------:|
-| FP32            | (64, 3, 640, 640) | 40.5 |
-| OwLite INT8 PTQ | (64, 3, 640, 640) | 39.7 |
-| OwLite INT8 QAT | (64, 3, 640, 640) | 40.0 |
-| INT8 TensorRT   | (64, 3, 640, 640) | 37.5 |
+| FP32            | (64, 3, 640, 640) | 40.5              |
+| OwLite INT8 PTQ | (64, 3, 640, 640) | 40.0              |
+| OwLite INT8 QAT | (64, 3, 640, 640) | 40.1              |
+| INT8 TensorRT   | (64, 3, 640, 640) | 37.5              |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
 
@@ -97,9 +97,9 @@ TensorRT Evaluation GPU: A6000
 
 | Quantization    | Input Size        | mAP 0.50~0.95 (%) |
 | --------------- |:-----------------:|:-----------------:|
-| FP32            | (32, 3, 640, 640) | 46.9 |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 46.5 |
-| INT8 TensorRT   | (32, 3, 640, 640) | 43.9 |
+| FP32            | (32, 3, 640, 640) | 46.9              |
+| OwLite INT8 PTQ | (32, 3, 640, 640) | 46.6              |
+| INT8 TensorRT   | (32, 3, 640, 640) | 43.9              |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
 
@@ -127,9 +127,9 @@ TensorRT Evaluation GPU: A6000
 
 | Quantization    | Input Size        | mAP 0.50~0.95 (%) | 
 | --------------- |:-----------------:|:-----------------:|
-| FP32            | (16, 3, 640, 640) | 49.7 |
-| OwLite INT8 PTQ | (16, 3, 640, 640) | 49.0 |
-| INT8 TensorRT   | (16, 3, 640, 640) | 47.2 |
+| FP32            | (16, 3, 640, 640) | 49.7              |
+| OwLite INT8 PTQ | (16, 3, 640, 640) | 49.3              |
+| INT8 TensorRT   | (16, 3, 640, 640) | 47.2              |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
 
@@ -157,9 +157,9 @@ TensorRT Evaluation GPU: A6000
 
 | Quantization    | Input Size        | mAP 0.50~0.95 (%) | 
 | --------------- |:-----------------:|:-----------------:|
-| FP32            | (16, 3, 640, 640) | 51.1 |
-| OwLite INT8 PTQ | (16, 3, 640, 640) | 50.5 |
-| INT8 TensorRT   | (16, 3, 640, 640) | 48.2 |
+| FP32            | (16, 3, 640, 640) | 51.1              |
+| OwLite INT8 PTQ | (16, 3, 640, 640) | 50.5              |
+| INT8 TensorRT   | (16, 3, 640, 640) | 48.2              |
 
 - INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
 

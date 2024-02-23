@@ -6,12 +6,12 @@ easydict
 evaluate
 huggingface-hub==0.17.3
 opencv-python
-pandas==2.1.2
-onnx==1.14.0
+pandas>=2.1.2
+onnx>=1.14.0
 onnx-graphsurgeon==0.3.27
-onnx-simplifier==0.4.10
+onnx-simplifier==0.4.35
 sentencepiece
 scipy
 scikit-learn
-torch==2.0.1
-torchvision==0.15.2
+torch<=2.1.2
+torchvision<=0.16.2
