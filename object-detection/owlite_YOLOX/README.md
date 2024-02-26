@@ -62,26 +62,17 @@ CUDA_VISIBLE_DEVICES=0 python -m tools.eval -n yolox-s -c yolox_s.pth -b 64 -d 1
   - QAT backward: CLQ
   - Gradient scales for weight quantization in Conv were set to 0.01
 
-### Accuracy Results
-
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) |
-| --------------- |:-----------------:|:-----------------:|
-| FP32            | (64, 3, 640, 640) | 40.5              |
-| OwLite INT8 PTQ | (64, 3, 640, 640) | 40.0              |
-| OwLite INT8 QAT | (64, 3, 640, 640) | 40.1              |
-| INT8 TensorRT   | (64, 3, 640, 640) | 37.5              |
-
-- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
-
-### Latency Results
+### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | GPU Latency (ms) | 
-| --------------- |:-----------------:|:----------------:|
-| FP16 TensorRT   | (64, 3, 640, 640) | 33.38            |
-| OwLite INT8 PTQ | (64, 3, 640, 640) | 18.43            |
-| INT8 TensorRT   | (64, 3, 640, 640) | 19.44            |
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | GPU Latency (ms) |
+| --------------- |:-----------------:|:-----------------:|:----------------:|
+| FP16 TensorRT   | (64, 3, 640, 640) | 40.5              | 33.38            |
+| OwLite INT8 PTQ | (64, 3, 640, 640) | 40.0              | 18.43            |
+| OwLite INT8 QAT | (64, 3, 640, 640) | 40.1              | 18.43            |
+| INT8 TensorRT   | (64, 3, 640, 640) | 37.5              | 19.44            |
 
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 <details>
@@ -93,25 +84,16 @@ TensorRT Evaluation GPU: A6000
 - Apply OwLite Recommended Config with the following calibration method
   - PTQ calibration: MSE
 
-### Accuracy Results
-
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) |
-| --------------- |:-----------------:|:-----------------:|
-| FP32            | (32, 3, 640, 640) | 46.9              |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 46.6              |
-| INT8 TensorRT   | (32, 3, 640, 640) | 43.9              |
-
-- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
-
-### Latency Results
+### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | GPU Latency (ms) | 
-| --------------- |:-----------------:|:----------------:|
-| FP16 TensorRT   | (32, 3, 640, 640) | 37.37            |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 19.52            |
-| INT8 TensorRT   | (32, 3, 640, 640) | 20.47            |
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | GPU Latency (ms) | 
+| --------------- |:-----------------:|:-----------------:|:----------------:|
+| FP16 TensorRT   | (32, 3, 640, 640) | 46.9              | 37.37            |
+| OwLite INT8 PTQ | (32, 3, 640, 640) | 46.6              | 19.52            |
+| INT8 TensorRT   | (32, 3, 640, 640) | 43.9              | 20.47            |
 
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 <details>
@@ -123,25 +105,16 @@ TensorRT Evaluation GPU: A6000
 - Apply OwLite Recommended Config with the following calibration method
   - PTQ calibration: MSE
 
-### Accuracy Results
-
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) | 
-| --------------- |:-----------------:|:-----------------:|
-| FP32            | (16, 3, 640, 640) | 49.7              |
-| OwLite INT8 PTQ | (16, 3, 640, 640) | 49.3              |
-| INT8 TensorRT   | (16, 3, 640, 640) | 47.2              |
-
-- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
-
-### Latency Results
+### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | GPU Latency (ms) | 
-| --------------- |:-----------------:|:----------------:|
-| FP16 TensorRT   | (16, 3, 640, 640) | 31.97            |
-| OwLite INT8 PTQ | (16, 3, 640, 640) | 16.77            |
-| INT8 TensorRT   | (16, 3, 640, 640) | 16.59            |
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | GPU Latency (ms) |
+| --------------- |:-----------------:|:-----------------:|:----------------:|
+| FP16 TensorRT   | (16, 3, 640, 640) | 49.7              | 31.97            |
+| OwLite INT8 PTQ | (16, 3, 640, 640) | 49.3              | 16.77            |
+| INT8 TensorRT   | (16, 3, 640, 640) | 47.2              | 16.59            |
 
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 <details>
@@ -153,25 +126,16 @@ TensorRT Evaluation GPU: A6000
 - Apply OwLite Recommended Config with the following calibration method
   - PTQ calibration: MSE
 
-### Accuracy Results
-
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) | 
-| --------------- |:-----------------:|:-----------------:|
-| FP32            | (16, 3, 640, 640) | 51.1              |
-| OwLite INT8 PTQ | (16, 3, 640, 640) | 50.5              |
-| INT8 TensorRT   | (16, 3, 640, 640) | 48.2              |
-
-- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
-
-### Latency Results
+### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | GPU Latency (ms) | 
-| --------------- |:-----------------:|:----------------:|
-| FP16 TensorRT   | (16, 3, 640, 640) | 58.79            |
-| OwLite INT8 PTQ | (16, 3, 640, 640) | 28.18            |
-| INT8 TensorRT   | (16, 3, 640, 640) | 29.12            |
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | GPU Latency (ms) |
+| --------------- |:-----------------:|:-----------------:|:----------------:|
+| FP16 TensorRT   | (16, 3, 640, 640) | 51.1              | 58.79            |
+| OwLite INT8 PTQ | (16, 3, 640, 640) | 50.5              | 28.18            |
+| INT8 TensorRT   | (16, 3, 640, 640) | 48.2              | 29.12            |
 
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 ## Reference

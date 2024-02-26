@@ -59,20 +59,16 @@
             - 10 for CoLA task
             - 3 for MRPC, STS-B, and MNLI tasks
     
-### GLUE Results
-
-| Quantization | Input Size | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (Acc./F1)| MNLI (Matched/Mismatched Acc.) | QNLI  | RTE   | WNLI  |  
-| ------------ |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|
-| FP32         | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 
-| OwLite INT8  | (8x128)    | 57.33                 | 91.17 | 83.33/88.36    | 87.58/87.33                   | 89.25/86.01  | 83.22/83.41                    | 89.44 | 63.20 | 57.14 | 
-
-### Latency Results
+### GLUE Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size | Latency (ms) |  
-| --------------- |:----------:|:------------:|
-| FP16 TensorRT   | (8x128)    | 2.32         |
-| OwLite INT8     | (8x128)    | 1.65         |
+| Quantization  | Input Size | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (Acc./F1)| MNLI (Matched/Mismatched Acc.) | QNLI  | RTE   | WNLI  | Latency (ms) |  
+| ------------- |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|:------------:|
+| FP16 TensorRT | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         | 
+| OwLite INT8   | (8x128)    | 57.33                 | 91.17 | 83.33/88.36    | 87.58/87.33                   | 89.25/86.01  | 83.22/83.41                    | 89.44 | 63.20 | 57.14 | 1.65         |
+| INT8 TensorRT | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         |
+
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), although all layers in BERT-base fell back to FP16. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 
 ### References
 https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification

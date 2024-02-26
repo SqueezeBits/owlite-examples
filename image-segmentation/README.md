@@ -58,25 +58,16 @@ python main.py --model deeplabv3_resnet50 --ckpt <checkpoint_path> --data_root <
 
 - PTQ calibration : MSE
 
-### Accuracy Results
-
-| Quantization | Input Size | mIoU |   
-| ------------- |:-------------:|:-------------:|
-| FP32 Original | (16, 3, 513, 513) | 0.7674
-| OwLite INT8 PTQ | (16, 3, 513, 513) | 0.7683
-| TensorRT INT8 | (16, 3, 513, 513) | 0.7649
-
-- TensorRT INT8 engine was generated via [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/examples/api) after calibration
-
-### Latency Results
+### Accuracy and Latency Results
 Evaluation GPU: A6000
 
+| Quantization    | Input Size         | mIoU  | GPU Latency (ms) |   
+| --------------- |:-----------------:|:------:|:----------------:|
+| FP16 TensorRT   | (16, 3, 513, 513) | 0.7674 | 19.657           |
+| OwLite INT8 PTQ | (16, 3, 513, 513) | 0.7683 | 9.823            |
+| TensorRT INT8   | (16, 3, 513, 513) | 0.7649 | 9.830            |
 
-| Quantization | Input Size | GPU Latency (ms) |   
-| ------------- |:-------------:|:-------------:|
-| TensorRT FP16 | (16, 3, 513, 513) | 19.657
-| OwLite INT8 PTQ | (16, 3, 513, 513) | 9.823
-| TensorRT INT8 | (16, 3, 513, 513) | 9.830
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 ## Reference

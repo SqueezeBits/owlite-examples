@@ -53,24 +53,16 @@ CUDA_VISIBLE_DEVICES=0 python tools/eval.py --specific-shape owlite --project <o
   - PTQ calibration: Percentile (99.99%)
 
     
-### Accuracy Results
-
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) |   
-| --------------- |:-----------------:|:-----------------:|:------------:|
-| FP32            | (32, 3, 640, 640) | 44.7              | 61.6         |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 41.8              | 58.0         |
-| INT8 TensorRT   | (32, 3, 640, 640) | 41.0              | 57.5         |
-
-- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
-
-### Latency Results
+### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | GPU Latency (ms) | 
-| --------------- |:-----------------:|:----------------:|
-| FP16 TensorRT   | (32, 3, 640, 640) | 17.3             |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 8.6              |
-| INT8 TensorRT   | (32, 3, 640, 640) | 8.7              | 
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) | GPU Latency (ms) |  
+| --------------- |:-----------------:|:-----------------:|:------------:|:----------------:|
+| FP16 TensorRT   | (32, 3, 640, 640) | 44.7              | 61.6         | 17.3             |
+| OwLite INT8 PTQ | (32, 3, 640, 640) | 41.8              | 58.0         | 8.6              |
+| INT8 TensorRT   | (32, 3, 640, 640) | 41.0              | 57.5         | 8.7              |
+
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 ## Reference

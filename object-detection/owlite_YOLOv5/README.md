@@ -66,26 +66,17 @@ python train.py owlite --project <owlite_project_name> --baseline <owlite_baseli
 - Weight Decay: 1e-4
 - Epochs: 2
     
-### Accuracy Results
-
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) |   
-| --------------- |:-----------------:|:-----------------:|:------------:|
-| FP32            | (32, 3, 640, 640) | 33.2              | 50.6         |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 32.6              | 50.3         |
-| OwLite INT8 QAT | (32, 3, 640, 640) | 33.2              | 51.6         |
-| INT8 TensorRT   | (32, 3, 640, 640) | 28.7              | 45.2         |
-
-- INT8 TensorRT engine was build using FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
-
-### Latency Results
+### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | GPU Latency (ms) | 
-| --------------- |:-----------------:|:----------------:|
-| FP16 TensorRT   | (32, 3, 640, 640) | 15.1             |
-| OwLite INT8     | (32, 3, 640, 640) | 9.76             |
-| INT8 TensorRT   | (32, 3, 640, 640) | 9.75             |
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) | GPU Latency (ms) | 
+| --------------- |:-----------------:|:-----------------:|:------------:|:----------------:|
+| FP16 TensorRT   | (32, 3, 640, 640) | 33.2              | 50.6         | 15.1             |
+| OwLite INT8 PTQ | (32, 3, 640, 640) | 32.6              | 50.3         | 9.76             |
+| OwLite INT8 QAT | (32, 3, 640, 640) | 33.2              | 51.6         | 9.76             |
+| INT8 TensorRT   | (32, 3, 640, 640) | 28.7              | 45.2         | 9.75             |
 
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 ## Reference
