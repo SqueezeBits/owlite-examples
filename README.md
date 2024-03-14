@@ -7,7 +7,7 @@
 - [OwLite How-to-use](https://squeezebits.gitbook.io/owlite/user-guide/how-to-use)
 - [OwLite Web UI](https://squeezebits.gitbook.io/owlite/user-guide/web-ui)
 
-This repository is tested on ```PyTorch>=2.0,<=2.1``` and ```OwLite v1.2```.
+This repository is tested on ```PyTorch>=2.0,<=2.2``` and ```OwLite v1.2```.
 
 ## Environment setup
 

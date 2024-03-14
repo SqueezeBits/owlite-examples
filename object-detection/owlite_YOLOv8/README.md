@@ -25,7 +25,7 @@ patch -p1 < ../apply_owlite.patch
     ```
 3. install OwLite package
     ```
-    pip install --extra-index-url https://pypi.ngc.nvidia.com git+https://github.com/SqueezeBits/owlite
+    pip install owlite --extra-index-url https://pypi.squeezebits.com/
     ```
 
 

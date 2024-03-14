@@ -19,6 +19,7 @@ import torch.utils.data.distributed
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torchvision.transforms as transforms
+from timm import models as timm_models
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 import owlite  # import owlite
@@ -26,15 +27,19 @@ import owlite  # import owlite
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
-
+timm_model_names = sorted(name for name in timm_models.__dict__
+    if name.islower() and not name.startswith("__")
+    and callable(timm_models.__dict__[name]))
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('--data', metavar='DIR', nargs='?', default='imagenet',
                     help='path to dataset (default: imagenet)')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
-                    choices=model_names,
+                    choices = model_names + timm_model_names,
                     help='model architecture: ' +
-                        ' | '.join(model_names) +
+                        ' | '.join(model_names + timm_model_names) +
                         ' (default: resnet18)')
+parser.add_argument('--timm', action='store_true',
+                    help='use models defined in timm package')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=1, type=int, metavar='N',
@@ -170,12 +175,14 @@ def main_worker(gpu, ngpus_per_node, args, owl):
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
     # create model
+    model_dict = models.__dict__ if args.arch in model_names and not args.timm else timm_models.__dict__
+    
     if args.pretrained:
         print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True)
+        model = model_dict[args.arch](pretrained=True)
     else:
         print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]()
+        model = model_dict[args.arch]()
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')

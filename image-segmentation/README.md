@@ -23,9 +23,9 @@ patch -p1 < ../apply_owlite.patch
     ```
     pip install -r requirements.txt
     ```
-3. install OwLite package (pre-release version)
+3. install OwLite package
     ```
-    pip install --extra-index-url https://pypi.ngc.nvidia.com git+https://github.com/SqueezeBits/owlite
+    pip install owlite --extra-index-url https://pypi.squeezebits.com/
     ```
 
 ### Download checkpoint

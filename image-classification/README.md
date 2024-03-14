@@ -1,5 +1,7 @@
 # OwLite Image Classification Example 
-- Model : ResNet18, ResNet50, MobileNet-V2, MobileNet-V3-Large, EfficientNet-B0, EfficientNet-V2-S, Swin-B, ViT-B-16
+- Model 
+  - torchvision: ResNet18, ResNet50, MobileNet-V2, MobileNet-V3-Large, EfficientNet-B0, EfficientNet-V2-S, Swin-B, ViT-B-16
+  - timm: EfficientFormer-L1
 - Dataset : ImageNet Dataset
 
 
@@ -17,9 +19,12 @@ Download ImageNet dataset referring to the [README](https://github.com/pytorch/e
     ```
 2. install OwLite package
     ```
-    pip install --extra-index-url https://pypi.ngc.nvidia.com git+https://github.com/SqueezeBits/owlite
+    pip install owlite --extra-index-url https://pypi.squeezebits.com/
     ```
-
+3. install required packages
+    ```
+    pip install -r requirements.txt
+    ```
 ## How To Run
 
 ### Quick Start
@@ -302,6 +307,36 @@ TensorRT Evaluation GPU: A6000
 
 - The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), although all layers in ViT-B-16 fell back to FP16. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
+
+<details>
+<summary>EfficientFormer-L1</summary>
+
+### Configuration
+
+#### Quantization Configuration
+
+- Apply OwLite Recommended Config with the following calibration method
+  - PTQ calibration: Percentile (99.99)
+  - QAT backward: CLQ
+  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+
+#### Training Configuration
+
+- Learning Rate: 6e-4
+- Weight Decay: 5e-5
+- Epochs: 5
+
+### Accuracy & Latency Results
+TensorRT Evaluation GPU: A6000
+
+| Quantization    | Input Size         | Top 1 Acc (%) | Top 5 Acc (%) | GPU Latency (ms) |
+| --------------- |:------------------:|:-------------:|:-------------:|:----------------:|
+| FP16 TensorRT   | (64, 3, 224, 224) | 80.2          | 95.0          | 6.70             |
+| OwLite INT8 PTQ | (64, 3, 224, 224) | 78.7          | 94.3          | 4.82             |
+| OwLite INT8 QAT | (64, 3, 224, 224) | 79.5          | 95.2          | 4.82             |
+| INT8 TensorRT   | (64, 3, 224, 224) | 59.7          | 80.5          | 5.10             |
+
+- INT8 TensorRT engine was build using applying FP16 and INT8 flags, further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide)
 
 ## Reference
 https://github.com/pytorch/examples/blob/main/imagenet/main.py
