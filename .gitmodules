@@ -17,3 +17,6 @@
 [submodule "object-detection/owlite_YOLOX/YOLOX"]
 	path = object-detection/owlite_YOLOX/YOLOX
 	url = https://github.com/Megvii-BaseDetection/YOLOX.git
+[submodule "object-detection/owlite_YOLOv7/yolov7"]
+	path = object-detection/owlite_YOLOv7/yolov7
+	url = https://github.com/WongKinYiu/yolov7

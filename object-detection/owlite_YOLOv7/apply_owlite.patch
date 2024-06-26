@@ -1,0 +1,157 @@
+diff --git a/models/yolo.py b/models/yolo.py
+index 95a019c..3b0df4d 100644
+--- a/models/yolo.py
++++ b/models/yolo.py
+@@ -42,7 +42,6 @@ class Detect(nn.Module):
+     def forward(self, x):
+         # x = x.copy()  # for profiling
+         z = []  # inference output
+-        self.training |= self.export
+         for i in range(self.nl):
+             x[i] = self.m[i](x[i])  # conv
+             bs, _, ny, nx = x[i].shape  # x(bs,255,20,20) to x(bs,3,20,20,85)
+diff --git a/test.py b/test.py
+index 17b4806..9454082 100644
+--- a/test.py
++++ b/test.py
+@@ -16,7 +16,7 @@ from utils.general import coco80_to_coco91_class, check_dataset, check_file, che
+ from utils.metrics import ap_per_class, ConfusionMatrix
+ from utils.plots import plot_images, output_to_target, plot_study_txt
+ from utils.torch_utils import select_device, time_synchronized, TracedModel
+-
++import owlite
+ 
+ def test(data,
+          weights=None,
+@@ -37,10 +37,16 @@ def test(data,
+          plots=True,
+          wandb_logger=None,
+          compute_loss=None,
+-         half_precision=True,
++         half_precision=False,
+          trace=False,
+          is_coco=False,
+-         v5_metric=False):
++         v5_metric=False,
++         owlite_project=None,
++         owlite_baseline=None,
++         owlite_experiment=None,
++         owlite_duplicate_from=None,
++         owlite_ptq=False,
++         owlite_calib_num=256):
+     # Initialize/load model and set device
+     training = model is not None
+     if training:  # called by train.py
+@@ -87,7 +93,7 @@ def test(data,
+         if device.type != 'cpu':
+             model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
+         task = opt.task if opt.task in ('train', 'val', 'test') else 'val'  # path to train/val/test images
+-        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=True,
++        dataloader = create_dataloader(data[task], imgsz, batch_size, gs, opt, pad=0.5, rect=False,
+                                        prefix=colorstr(f'{task}: '))[0]
+ 
+     if v5_metric:
+@@ -101,6 +107,38 @@ def test(data,
+     p, r, f1, mp, mr, map50, map, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
+     loss = torch.zeros(3, device=device)
+     jdict, stats, ap, ap_class, wandb_images = [], [], [], [], []
++
++    if owlite_project is not None:
++        # Initialize OwLite with user settings
++        owl = owlite.init(
++            project=owlite_project,
++            baseline=owlite_baseline,
++            experiment=owlite_experiment,
++            duplicate_from=owlite_duplicate_from
++        )
++
++        # OwLite Model Quantization
++        example_input = torch.randn(batch_size, 3, imgsz, imgsz).to(device)
++        model = owl.convert(model, example_input)
++
++        # OwLite Model Calibration
++        if owlite_ptq:
++            train_loader = create_dataloader(data['train'], imgsz, batch_size, gs, opt, pad=0.5, rect=False,
++                                        prefix=colorstr(f'{task}: '))[0]
++
++            with owlite.calibrate(model) as calibrate_model:
++                for i, (imgs, _, _, _) in enumerate(train_loader):
++                    if i > 0 and i >= owlite_calib_num // batch_size:
++                        break
++                    imgs = imgs.float()/255
++                    calibrate_model(imgs.to(device))
++
++        # Export the model using OwLite
++        owl.export(model)
++
++        # Benchmark the model using OwLite
++        owl.benchmark()
++
+     for batch_i, (img, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
+         img = img.to(device, non_blocking=True)
+         img = img.half() if half else img.float()  # uint8 to fp16/32
+@@ -111,7 +149,10 @@ def test(data,
+         with torch.no_grad():
+             # Run model
+             t = time_synchronized()
+-            out, train_out = model(img, augment=augment)  # inference and training outputs
++            if owlite_project is not None:
++                out, train_out = model(img)
++            else:
++                out, train_out = model(img, augment=augment)  # inference and training outputs
+             t0 += time_synchronized() - t
+ 
+             # Compute loss
+@@ -284,6 +325,8 @@ def test(data,
+     maps = np.zeros(nc) + map
+     for i, c in enumerate(ap_class):
+         maps[c] = ap[i]
++    if owlite_project is not None:
++        owl.log(mAP=map)
+     return (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+ 
+ 
+@@ -309,6 +352,16 @@ if __name__ == '__main__':
+     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
+     parser.add_argument('--v5-metric', action='store_true', help='assume maximum recall as 1.0 in AP calculation')
++
++    subparsers = parser.add_subparsers(required=True)
++    owlite_parser = subparsers.add_parser("owlite", help="Owlite arguments")
++    owlite_parser.add_argument('--project', type=str, required=True, dest="owlite_project", help="Owlite project name")
++    owlite_parser.add_argument('--baseline', type=str, required=True, dest="owlite_baseline", help="Owlite baseline name")
++    owlite_parser.add_argument('--experiment', type=str, default=None, dest="owlite_experiment", help="Owlite experiment name")
++    owlite_parser.add_argument('--duplicate-from', type=str, default=None, dest="owlite_duplicate_from", help="The name of Owlite experiment where the config to be duplicated is located")
++    owlite_parser.add_argument('--ptq', action="store_true", dest="owlite_ptq", help="True if Owlite PTQ is applied")
++    owlite_parser.add_argument('--calib-num', type=int, default=256, dest="owlite_calib_num", help="Number of data to use for Owlite calibration")
++
+     opt = parser.parse_args()
+     opt.save_json |= opt.data.endswith('coco.yaml')
+     opt.data = check_file(opt.data)  # check file
+@@ -330,7 +383,13 @@ if __name__ == '__main__':
+              save_hybrid=opt.save_hybrid,
+              save_conf=opt.save_conf,
+              trace=not opt.no_trace,
+-             v5_metric=opt.v5_metric
++             v5_metric=opt.v5_metric,
++             owlite_project=opt.owlite_project,
++             owlite_baseline=opt.owlite_baseline,
++             owlite_experiment=opt.owlite_experiment,
++             owlite_duplicate_from=opt.owlite_duplicate_from,
++             owlite_ptq=opt.owlite_ptq,
++             owlite_calib_num=opt.owlite_calib_num
+              )
+ 
+     elif opt.task == 'speed':  # speed benchmarks
+diff --git a/utils/datasets.py b/utils/datasets.py
+index 5fe4f7b..45c9324 100644
+--- a/utils/datasets.py
++++ b/utils/datasets.py
+@@ -87,6 +87,7 @@ def create_dataloader(path, imgsz, batch_size, stride, opt, hyp=None, augment=Fa
+                         num_workers=nw,
+                         sampler=sampler,
+                         pin_memory=True,
++                        drop_last=True,
+                         collate_fn=LoadImagesAndLabels.collate_fn4 if quad else LoadImagesAndLabels.collate_fn)
+     return dataloader, dataset
+ 

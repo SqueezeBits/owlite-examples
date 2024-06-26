@@ -272,9 +272,9 @@ TensorRT Evaluation GPU: A6000
 | FP16 TensorRT   | (64, 3, 224, 224) | 83.2          | 96.5          | 81.9             |
 | OwLite INT8 PTQ | (64, 3, 224, 224) | 82.9          | 96.4          | 56.7             |
 | OwLite INT8 QAT | (64, 3, 224, 224) | 82.9          | 96.4          | 56.7             |
-| INT8 TensorRT   | (64, 3, 224, 224) | 83.2          | 96.5          | 80.7             |
+| INT8 TensorRT*  | (64, 3, 224, 224) | 83.2          | 96.5          | 80.7             |
 
-- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), although all layers in Swin-B fell back to FP16. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy). However, the results were the same as those of the FP16 TensorRT engine, as the attempt to build with INT8 failed, leading to fallback to FP16 for all operations. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 <details>
@@ -303,9 +303,9 @@ TensorRT Evaluation GPU: A6000
 | FP16 TensorRT   | (64, 3, 224, 224) | 81.1          | 95.3          | 31.2             |
 | OwLite INT8 PTQ | (64, 3, 224, 224) | 80.4          | 95.1          | 20.1             |
 | OwLite INT8 QAT | (64, 3, 224, 224) | 80.6          | 95.2          | 20.1             |
-| INT8 TensorRT   | (64, 3, 224, 224) | 81.1          | 95.3          | 31.2             |
+| INT8 TensorRT*  | (64, 3, 224, 224) | 81.1          | 95.3          | 31.2             |
 
-- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), although all layers in ViT-B-16 fell back to FP16. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy). However, the results were the same as those of the FP16 TensorRT engine, as the attempt to build with INT8 failed, leading to fallback to FP16 for all operations. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 <details>

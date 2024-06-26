@@ -66,9 +66,9 @@ TensorRT Evaluation GPU: A6000
 | ------------- |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|:------------:|
 | FP16 TensorRT | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         | 
 | OwLite INT8   | (8x128)    | 57.33                 | 91.17 | 83.33/88.36    | 87.58/87.33                   | 89.25/86.01  | 83.22/83.41                    | 89.44 | 63.20 | 57.14 | 1.65         |
-| INT8 TensorRT | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         |
+| INT8 TensorRT*| (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         |
 
-- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), although all layers in BERT-base fell back to FP16. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy). However, the results were the same as those of the FP16 TensorRT engine, as the attempt to build with INT8 failed, leading to fallback to FP16 for all operations. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 
 ### References
 https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification

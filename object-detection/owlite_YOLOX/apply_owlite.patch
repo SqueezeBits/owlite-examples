@@ -9,7 +9,7 @@ index 80f6d17..cbae374 100644
 -onnx-simplifier==0.4.10
 +onnx-simplifier>=0.4.10
 diff --git a/tools/eval.py b/tools/eval.py
-index 83ad76b..1126e03 100644
+index 83ad76b..f2df027 100644
 --- a/tools/eval.py
 +++ b/tools/eval.py
 @@ -22,13 +22,60 @@ from yolox.utils import (
@@ -358,7 +358,7 @@ index e218c74..b4914e0 100644
                      outputs = decoder(outputs, dtype=outputs.type())
  
 diff --git a/yolox/models/yolo_head.py b/yolox/models/yolo_head.py
-index 3e51768..4fd821c 100644
+index 3e51768..51f835b 100644
 --- a/yolox/models/yolo_head.py
 +++ b/yolox/models/yolo_head.py
 @@ -13,7 +13,7 @@ from yolox.utils import bboxes_iou, cxcywh2xyxy, meshgrid, visualize_assign
@@ -565,11 +565,40 @@ index 3e51768..4fd821c 100644
  
          self.use_l1 = False
          self.l1_loss = nn.L1Loss(reduction="none")
+@@ -202,13 +214,13 @@ class YOLOXHead(nn.Module):
+                 dtype=xin[0].dtype,
+             )
+         else:
+-            self.hw = [x.shape[-2:] for x in outputs]
++            hw = [x.shape[-2:] for x in outputs]
+             # [batch, n_anchors_all, 85]
+             outputs = torch.cat(
+                 [x.flatten(start_dim=2) for x in outputs], dim=2
+             ).permute(0, 2, 1)
+             if self.decode_in_inference:
+-                return self.decode_outputs(outputs, dtype=xin[0].type())
++                return self.decode_outputs(outputs, hw, dtype=xin[0].type())
+             else:
+                 return outputs
+ 
+@@ -232,10 +244,10 @@ class YOLOXHead(nn.Module):
+         output[..., 2:4] = torch.exp(output[..., 2:4]) * stride
+         return output, grid
+ 
+-    def decode_outputs(self, outputs, dtype):
++    def decode_outputs(self, outputs, hw, dtype):
+         grids = []
+         strides = []
+-        for (hsize, wsize), stride in zip(self.hw, self.strides):
++        for (hsize, wsize), stride in zip(hw, self.strides):
+             yv, xv = meshgrid([torch.arange(hsize), torch.arange(wsize)])
+             grid = torch.stack((xv, yv), 2).view(1, -1, 2)
+             grids.append(grid)
 @@ -639,3 +651,52 @@ class YOLOXHead(nn.Module):
              save_name = save_prefix + str(batch_idx) + ".png"
              img = visualize_assign(img, xyxy_boxes, coords, matched_gt_inds, save_name)
              logger.info(f"save img to {save_name}")
-+    
++
 +    def forward_for_owlite_qat(self, input, labels=None, imgs=None):
 +        outputs = []
 +        origin_preds = []

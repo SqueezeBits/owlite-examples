@@ -1,5 +1,5 @@
 # OwLite Object Detection Example 
-- Model: YOLOv6-S
+- Model: YOLOv7
 - Dataset: COCO'17 Dataset
 
 ## Prerequisites
@@ -9,7 +9,7 @@ If you already have [COCO 2017 dataset](http://cocodataset.org), kindly modify t
 
 ### Apply patch
 ```
-cd YOLOv6
+cd yolov7
 patch -p1 < ../apply_owlite.patch
 ```
 
@@ -33,38 +33,39 @@ patch -p1 < ../apply_owlite.patch
 
 ### Run baseline model
 ```
-CUDA_VISIBLE_DEVICES=0 python tools/eval.py --specific-shape owlite --project <owlite_project_name> --baseline <owlite_baseline_name> 
+python test.py --data data/coco.yaml --img 640 --batch 16 --conf 0.001 --iou 0.65 --device 0 --weights yolov7.pt --name exp --no-trace owlite --project <owlite_project_name> --baseline <owlite_baseline_name>
 ```
 
 ### Run quantized model
 1. Create an experiment and save the config on OwLite GUI
 2. Run the code for OwLite PTQ 
     ```
-    CUDA_VISIBLE_DEVICES=0 python tools/eval.py --specific-shape owlite --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --ptq
+    python test.py --data data/coco.yaml --img 640 --batch 16 --conf 0.001 --iou 0.65 --device 0 --weights yolov7.pt --name exp --no-trace owlite --project <owlite_project_name> --baseline <owlite_baseline_name> --experiment <owlite_experiment_name> --ptq
     ```
 
 ## Results
 
 <details>
-<summary>YOLOv6-S</summary>
+<summary>YOLOv7</summary>
 
-### Quantization Configuration
+### Configuration
+
+#### Quantization Configuration
 
 - Apply OwLite Recommended Config with the following calibration method
-  - PTQ calibration: Percentile (99.99%)
-
+  - PTQ calibration: MSE
     
 ### Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
 
-| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) | GPU Latency (ms) |  
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) | GPU Latency (ms) | 
 | --------------- |:-----------------:|:-----------------:|:------------:|:----------------:|
-| FP16 TensorRT   | (32, 3, 640, 640) | 44.7              | 61.6         | 17.3             |
-| OwLite INT8 PTQ | (32, 3, 640, 640) | 41.8              | 58.0         | 8.6              |
-| INT8 TensorRT   | (32, 3, 640, 640) | 41.0              | 57.5         | 8.7              |
+| FP16 TensorRT   | (16, 3, 640, 640) | 50.9              | 69.4         | 27.38            |
+| OwLite INT8 PTQ | (16, 3, 640, 640) | 50.6              | 69.2         | 14.36            |
+| INT8 TensorRT   | (16, 3, 640, 640) | 38.9              | 59.5         | 15.74            |
 
 - The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>
 
 ## Reference
-https://github.com/meituan/YOLOv6
+https://github.com/WongKinYiu/yolov7

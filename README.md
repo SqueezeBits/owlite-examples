@@ -1,13 +1,24 @@
+![OwLite logo](https://github.com/SqueezeBits/owlite/assets/64083281/abaa3ad9-0c86-4a9c-9b8d-f54ed6d9524b)
+
+<div align="center">
+<p align="center">
+  <a href="https://www.squeezebits.com/">Website</a> •
+  <a href="https://owlite.ai/">Web UI</a> •
+  <a href="#environment-setup">Environment setup</a> •
+  <a href="#available-tasks">Available tasks</a> •
+  <a href="#contact">Contact</a>
+</p>
+<p align="center">
+  <a href="https://github.com/SqueezeBits/owlite/releases"><img src="https://img.shields.io/github/v/release/SqueezeBits/owlite?color=EE781F" /></a>
+  <a href="https://squeezebits.gitbook.io/owlite/quick/readme"><img src="https://img.shields.io/badge/Documentation-FFA32C" /></a>
+  <a href="https://github.com/SqueezeBits/owlite#installation"><img src="https://img.shields.io/badge/python-~=3.10-blue" /></a>
+  <a><img src="https://img.shields.io/badge/pytorch-2.0%20%7C%202.1%20%7C%202.2-blue" /></a>
+</p>
+</div>
+
 # OwLite Examples
 
-```OwLite Examples``` repository offers illustrative example codes to help users seamlessly compress PyTorch deep learning models and transform them into TensorRT engines. This is achieved through the OwLite package, which requires only slight modification to current codebases. Most of the examples are based on other public repositories to show how easy it is to apply OwLite compression on the existing codes. You can also check the powerful results of OwLite compression, as demonstrated by numerous examples. Detailed information regarding the OwLite tool can be found further below.
-
-- [OwLite](https://squeezebits.gitbook.io/owlite)
-- [OwLite Tutorials](https://squeezebits.gitbook.io/owlite/user-guide/tutorial)
-- [OwLite How-to-use](https://squeezebits.gitbook.io/owlite/user-guide/how-to-use)
-- [OwLite Web UI](https://squeezebits.gitbook.io/owlite/user-guide/web-ui)
-
-This repository is tested on ```PyTorch>=2.0,<=2.2``` and ```OwLite v1.2```.
+```OwLite Examples``` repository offers illustrative example codes to help users seamlessly compress PyTorch deep learning models and transform them into TensorRT engines. This is achieved through the OwLite package, which requires only slight modification to current codebases. Most of the examples are based on other public repositories to show how easy it is to apply OwLite compression on the existing codes. You can also check the powerful results of OwLite compression, as demonstrated by numerous examples.
 
 ## Environment setup
 
@@ -26,3 +37,7 @@ List of available tasks will be continuously updated.
 
 ## Contact
 Please contact owlite-admin@squeezebits.com for any questions or suggestions.
+
+<br>
+<br>
+<div align="center"><img src="https://github.com/SqueezeBits/owlite/assets/64083281/bdbf55a6-ead7-42d3-b0b7-f1e8eddfb558" width="300px"></div>
