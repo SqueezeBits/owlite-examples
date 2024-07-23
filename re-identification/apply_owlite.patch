@@ -1,0 +1,101 @@
+diff --git a/test.py b/test.py
+index 49f6b69..356df6a 100644
+--- a/test.py
++++ b/test.py
+@@ -3,6 +3,7 @@
+ from __future__ import print_function, division
+ 
+ import argparse
++import owlite
+ import torch
+ import torch.nn as nn
+ import torch.optim as optim
+@@ -47,6 +48,15 @@ parser.add_argument('--fp16', action='store_true', help='use fp16.' )
+ parser.add_argument('--ibn', action='store_true', help='use ibn.' )
+ parser.add_argument('--ms',default='1', type=str,help='multiple_scale: e.g. 1 1,1.1  1,1.1,1.2')
+ 
++subparsers = parser.add_subparsers(required=True)
++owlite_parser = subparsers.add_parser("owlite", help="Owlite arguments")
++owlite_parser.add_argument('--project', type=str, required=True, dest="owlite_project", help="Owlite project name")
++owlite_parser.add_argument('--baseline', type=str, required=True, dest="owlite_baseline", help="Owlite baseline name")
++owlite_parser.add_argument('--experiment', type=str, default=None, dest="owlite_experiment", help="Owlite experiment name")
++owlite_parser.add_argument('--duplicate-from', type=str, default=None, dest="owlite_duplicate_from", help="The name of Owlite experiment where the config to be duplicated is located")
++owlite_parser.add_argument('--ptq', action="store_true", dest="owlite_ptq", help="True if Owlite PTQ is applied")
++owlite_parser.add_argument('--calib-num', type=int, default=256, dest="owlite_calib_num", help="Number of data to use for Owlite calibration")
++
+ opt = parser.parse_args()
+ ###load config###
+ # load the training config
+@@ -144,11 +154,11 @@ data_dir = test_dir
+ if opt.multi:
+     image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query','multi-query']}
+     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
+-                                             shuffle=False, num_workers=16) for x in ['gallery','query','multi-query']}
++                                             shuffle=False, num_workers=16, drop_last=True) for x in ['gallery','query','multi-query']}
+ else:
+     image_datasets = {x: datasets.ImageFolder( os.path.join(data_dir,x) ,data_transforms) for x in ['gallery','query']}
+     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
+-                                             shuffle=False, num_workers=16) for x in ['gallery','query']}
++                                             shuffle=False, num_workers=16, drop_last=True) for x in ['gallery','query']}
+ class_names = image_datasets['query'].classes
+ use_gpu = torch.cuda.is_available()
+ 
+@@ -311,6 +321,35 @@ model = model.eval()
+ if use_gpu:
+     model = model.cuda()
+ 
++# Initialize OwLite with user settings
++owl = owlite.init(
++    project=opt.owlite_project, 
++    baseline=opt.owlite_baseline, 
++    experiment=opt.owlite_experiment, 
++    duplicate_from=opt.owlite_duplicate_from
++)
++
++# OwLite Model Quantization
++example_input = torch.randn(opt.batchsize, 3, w, h).cuda()
++model = owl.convert(model, example_input)
++# OwLite Model Calibration
++if opt.owlite_ptq:
++    calib_image_datasets = datasets.ImageFolder(os.path.join(data_dir, 'train'), data_transforms)
++
++    calib_dataloaders = torch.utils.data.DataLoader(calib_image_datasets, batch_size=opt.batchsize,
++                                             shuffle=True, num_workers=2, pin_memory=True,
++                                             prefetch_factor=2, persistent_workers=True) # 8 workers may work faster
++    
++    with owlite.calibrate(model) as calibrate_model:
++        for i,  (inputs, labels) in enumerate(calib_dataloaders):
++            if i > 0 and i >= opt.owlite_calib_num // opt.batchsize:
++                break
++            calibrate_model(inputs.cuda())
++# Export the model using OwLite
++owl.export(model)
++
++# Benchmark the model using OwLite
++owl.benchmark()
+ 
+ print('Here I fuse conv and bn for faster inference, and it does not work for transformers. Comment out this following line if you do not want to fuse conv&bn.')
+ model = fuse_all_conv_bn(model)
+@@ -322,7 +361,6 @@ model = fuse_all_conv_bn(model)
+ #dummy_forward_input = torch.rand(opt.batchsize, 3, h, w).cuda()
+ #model = torch.jit.trace(model, dummy_forward_input)
+ 
+-print(model)
+ # Extract feature
+ since = time.time()
+ with torch.no_grad():
+@@ -341,6 +379,14 @@ print(opt.name)
+ result = './model/%s/result.txt'%opt.name
+ os.system('python evaluate_gpu.py | tee -a %s'%result)
+
++with open(result, 'r') as f:
++    evaluation_results = f.readlines()
++
++rank_1 = float(results[-1].split(' ')[0].split(':')[-1])
++
++# Log Rank@1 of the model using OwLite
++owl.log(rank_1=rank_1)
++
+ if opt.multi:
+     result = {'mquery_f':mquery_feature.numpy(),'mquery_label':mquery_label,'mquery_cam':mquery_cam}
+     scipy.io.savemat('multi_query.mat',result)

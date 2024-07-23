@@ -1,5 +1,5 @@
-[submodule "image-segmentation/DeepLabV3Plus-Pytorch"]
-	path = image-segmentation/DeepLabV3Plus-Pytorch
+[submodule "image-segmentation/owlite_DeepLabV3/DeepLabV3Plus-Pytorch"]
+	path = image-segmentation/owlite_DeepLabV3/DeepLabV3Plus-Pytorch
 	url = https://github.com/VainF/DeepLabV3Plus-Pytorch.git
 [submodule "object-detection/owlite_YOLOv5/YOLOv5"]
 	path = object-detection/owlite_YOLOv5/YOLOv5
@@ -20,3 +20,12 @@
 [submodule "object-detection/owlite_YOLOv7/yolov7"]
 	path = object-detection/owlite_YOLOv7/yolov7
 	url = https://github.com/WongKinYiu/yolov7
+[submodule "re-identification/Person_reID_baseline_pytorch"]
+	path = re-identification/Person_reID_baseline_pytorch
+	url = https://github.com/layumi/Person_reID_baseline_pytorch.git
+[submodule "face-landmark/PIPNet"]
+	path = face-landmark/PIPNet
+	url = https://github.com/jhb86253817/PIPNet.git
+[submodule "image-segmentation/owlite_segment_anything/segment-anything"]
+	path = image-segmentation/owlite_segment_anything/segment-anything
+	url = https://github.com/facebookresearch/segment-anything

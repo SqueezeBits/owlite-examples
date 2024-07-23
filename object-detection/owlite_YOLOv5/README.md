@@ -23,10 +23,7 @@ patch -p1 < ../apply_owlite.patch
     ```
     pip install -r requirements.txt
     ```
-3. install OwLite package
-    ```
-    pip install owlite --extra-index-url https://pypi.squeezebits.com/
-    ```
+3. install OwLite package following the [installation guide](https://squeezebits.gitbook.io/owlite/user-guide/getting-started/install)
 
 
 ## How To Run

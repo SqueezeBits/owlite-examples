@@ -1,0 +1,180 @@
+diff --git a/segment_anything/modeling/image_encoder.py b/segment_anything/modeling/image_encoder.py
+index 66351d9..86ec9ea 100644
+--- a/segment_anything/modeling/image_encoder.py
++++ b/segment_anything/modeling/image_encoder.py
+@@ -351,8 +351,14 @@ def add_decomposed_rel_pos(
+ 
+     B, _, dim = q.shape
+     r_q = q.reshape(B, q_h, q_w, dim)
+-    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, Rh)
+-    rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, Rw)
++
++    r_q_reshaped = r_q.reshape(-1, q_w, dim)
++    Rh = Rh.repeat(B, 1, 1, 1).reshape(-1, Rh.shape[1], Rh.shape[2]).permute(0,2,1)
++    rel_h = torch.matmul(r_q_reshaped, Rh).reshape(B, q_h, q_w, -1)
++
++    r_q_reshaped = r_q.permute(0, 2, 1, 3).reshape(-1, q_h, dim)
++    Rw = Rw.repeat(B, 1, 1, 1).reshape(-1, Rw.shape[1], Rw.shape[2]).permute(0,2,1)
++    rel_w = torch.matmul(r_q_reshaped, Rw).reshape(B, q_w, q_h, -1).permute(0,2,1,3)
+ 
+     attn = (
+         attn.view(B, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] + rel_w[:, :, :, None, :]
+diff --git a/test.py b/test.py
+new file mode 100644
+index 0000000..6ce330e
+--- /dev/null
++++ b/test.py
+@@ -0,0 +1,153 @@
++import torch
++import cv2
++import argparse
++import owlite
++import numpy as np
++import matplotlib.pyplot as plt
++
++from torchvision import datasets, transforms
++from segment_anything import sam_model_registry, SamPredictor
++
++parser = argparse.ArgumentParser(description='Test')
++parser.add_argument('--model-type', default='vit_b', help='Type of segmentation-anything model')
++parser.add_argument('--checkpoint-path', default='sam_vit_b_01ec64.pth', help='A path of model checkpoint')
++parser.add_argument('--imgsz', type=int, default=1024, help='input image size of segment-anything model')
++parser.add_argument('--img-path', default=None, help='A path of image')
++parser.add_argument('--task', default=None, choices=[None, 'point', 'bbox', 'point_bbox'], help='Task using segment-anything')
++parser.add_argument('--point-coords', type=int, default=None, nargs='+', help='List of point coordinate(s)')
++parser.add_argument('--point-labels', type=int, default=None, nargs='+', help='List of point label(s)')
++parser.add_argument('--bbox-coords', type=int, default=None, nargs='+', help='List of bbox coordinate(s)')
++parser.add_argument('--output-path', type=str, required=True, help='path to save the result image')
++
++# Add OwLite arguments
++subparsers = parser.add_subparsers(required=True)
++owlite_parser = subparsers.add_parser("owlite", help="Owlite arguments")
++owlite_parser.add_argument('--project', type=str, required=True, dest="owlite_project", help="Owlite project name")
++owlite_parser.add_argument('--baseline', type=str, required=True, dest="owlite_baseline", help="Owlite baseline name")
++owlite_parser.add_argument('--experiment', type=str, default=None, dest="owlite_experiment", help="Owlite experiment name")
++owlite_parser.add_argument('--duplicate-from', type=str, default=None, dest="owlite_duplicate_from", help="The name of Owlite experiment where the config to be duplicated is located")
++owlite_parser.add_argument('--ptq', action="store_true", dest="owlite_ptq", help="True if Owlite PTQ is applied")
++owlite_parser.add_argument('--calib-num', type=int, default=32, dest="owlite_calib_num", help="Number of data to use for Owlite calibration")
++owlite_parser.add_argument('--data-path', type=str, dest="owlite_calib_data_path", help="Dataset path to use for Owlite calibration")
++
++args = parser.parse_args()
++
++np.random.seed(0)
++
++device = 'cuda' if torch.cuda.is_available() else 'cpu'
++
++input_points, input_labels, input_boxes = None, None, None
++
++if args.task in ['point', 'point_bbox']:
++    assert len(args.point_coords) % 2 == 0, 'coordinate of point(s) should be a pair'
++    input_points = np.asarray([[args.point_coords[idx + jdx * 2] for idx in range(2)] for jdx in range(len(args.point_coords)//2)])
++    input_labels = np.asarray(args.point_labels)
++if args.task in ['bbox', 'point_bbox']:
++    assert len(args.bbox_coords) % 4 == 0, 'coordinate of bbox(es) should be quad'
++    input_boxes = np.asarray([[args.bbox_coords[idx + jdx * 4] for idx in range(4)] for jdx in range(len(args.bbox_coords)//4)])
++
++def show_anns(anns):
++    if len(anns) == 0:
++        return
++    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
++    ax = plt.gca()
++
++    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
++    img[:,:,3] = 0
++    for ann in sorted_anns:
++        m = ann['segmentation']
++        color_mask = np.concatenate([np.random.random(3), [0.35]])
++        img[m] = color_mask
++    ax.set_axis_off()
++    ax.imshow(img, aspect='auto')
++
++def show_mask(mask, ax, random_color=False):
++    if random_color:
++        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
++    else:
++        color = np.array([30/255, 144/255, 255/255, 0.6])
++    h, w = mask.shape[-2:]
++    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
++    ax.set_axis_off()
++    ax.imshow(mask_image)
++    
++def show_points(coords, labels, ax, marker_size=375):
++    pos_points = coords[labels==1]
++    neg_points = coords[labels==0]
++    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
++    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)   
++    ax.set_axis_off()
++
++def show_box(box, ax):
++    x0, y0 = box[0], box[1]
++    w, h = box[2] - box[0], box[3] - box[1]
++    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2))    
++    ax.set_axis_off()
++
++sam = sam_model_registry[args.model_type](checkpoint=args.checkpoint_path)
++sam.to(device=device)
++
++owl = owlite.init(args.owlite_project,
++                args.owlite_baseline,
++                args.owlite_experiment,
++                args.owlite_duplicate_from)
++
++image_encoder = owl.convert(sam.image_encoder.eval(), torch.randn((1, 3, args.imgsz, args.imgsz)))
++
++if args.owlite_ptq:
++    data_transforms = transforms.Compose([
++        transforms.Resize((args.imgsz,args.imgsz), interpolation=2),
++        transforms.ToTensor(),
++        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
++    )
++    calib_image_datasets = datasets.ImageFolder(args.owlite_calib_data_path, data_transforms)
++    calib_dataloaders = torch.utils.data.DataLoader(calib_image_datasets, batch_size=1, shuffle=True, num_workers=2, pin_memory=True)
++
++    with owlite.calibrate(image_encoder) as calibrate_model:
++        for i,  (inputs, labels) in enumerate(calib_dataloaders):
++            if i > 0 and i >= args.owlite_calib_num:
++                break
++            calibrate_model(inputs.cuda())
++
++owl.export(image_encoder)
++owl.benchmark()
++
++if args.task is not None:
++    sam.image_encoder = image_encoder
++
++    image = cv2.imread(args.img_path)
++    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
++
++    plt.figure(frameon=False)
++    plt.imshow(image)
++
++    predictor = SamPredictor(sam)
++    predictor.set_image(image)
++    if args.task in ['point']:
++        masks, scores , _ = predictor.predict(
++            point_coords=input_points,
++            point_labels=input_labels,
++            box=input_boxes,
++            multimask_output=True,
++        )
++        show_points(input_points, input_labels, plt.gca())
++        show_mask(masks[np.argmax(scores)], plt.gca())
++    else:
++        masks = []
++        for box_index in range(input_boxes.shape[0]):
++            mask, scores , _ = predictor.predict(
++                point_coords=input_points[box_index][np.newaxis],
++                point_labels=input_labels[box_index][np.newaxis],
++                box=input_boxes[box_index][np.newaxis],
++                multimask_output=True if args.task in ['point','point_bbox'] else False,
++            )
++            masks.append(mask[np.argmax(scores)][np.newaxis])
++        if input_points is not None:
++            show_points(input_points, input_labels, plt.gca())
++
++        for idx in range(len(masks)):
++            show_mask(masks[idx], plt.gca(), random_color=True)
++            if input_boxes is not None:
++                show_box(input_boxes[idx], plt.gca())
++
++    plt.savefig(args.output_path, bbox_inches='tight', pad_inches=0)

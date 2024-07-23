@@ -1,9 +1,9 @@
 diff --git a/main.py b/main.py
 new file mode 100644
-index 00000000..5cae9799
+index 00000000..4378365d
 --- /dev/null
 +++ b/main.py
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,171 @@
 +import argparse
 +import random
 +import torch
@@ -25,6 +25,13 @@ index 00000000..5cae9799
 +        type=str,
 +        default="ultralytics/cfg/datasets/coco.yaml",
 +        help="dataset config file (default: coco.yaml)",
++    )
++    parser.add_argument(
++        "--task",
++        type=str,
++        default="detect",
++        choices=["detect", "pose"],
++        help="task of model (default: detect)",
 +    )
 +    parser.add_argument(
 +        "--gpu",
@@ -161,14 +168,15 @@ index 00000000..5cae9799
 +    owl.export(owlite_model)
 +    owl.benchmark()
 +    metrics = yolo.val(data=args.data_cfg, batch=args.batch_size, rect=False)
-+    owl.log(mAP=metrics.results_dict["metrics/mAP50-95(B)"])
++    map50_95_metrics_key = "metrics/mAP50-95(B)" if args.task == "detect" else "metrics/mAP50-95(P)"
++    owl.log(mAP=metrics.results_dict[map50_95_metrics_key])
 +    return
 +
 +
 +if __name__ == "__main__":
 +    main()
 diff --git a/ultralytics/data/build.py b/ultralytics/data/build.py
-index 07de91c8..04a20c6c 100644
+index 1d961aee..e109c4bf 100644
 --- a/ultralytics/data/build.py
 +++ b/ultralytics/data/build.py
 @@ -112,7 +112,8 @@ def build_dataloader(dataset, batch, workers, shuffle=True, rank=-1):

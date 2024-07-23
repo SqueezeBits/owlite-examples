@@ -17,10 +17,8 @@ Download ImageNet dataset referring to the [README](https://github.com/pytorch/e
     conda create -n <env_name> python=3.10 -y
     conda activate <env_name>
     ```
-2. install OwLite package
-    ```
-    pip install owlite --extra-index-url https://pypi.squeezebits.com/
-    ```
+2. install OwLite package following the [installation guide](https://squeezebits.gitbook.io/owlite/user-guide/getting-started/install)
+
 3. install required packages
     ```
     pip install -r requirements.txt
@@ -46,7 +44,7 @@ python main.py -a resnet18 --data ~/datasets/imagenet --pretrained --evaluate ow
     ```
     Example:
     ```
-    python main.py -a resnet18 --data ~/datasets/imagenet --pretrained --evaluate owlite --project TestProject --baseline torchvision_ResNet18 --experiment ResNet18_PTQ --ptq
+    python main.py -a resnet18 --data ~/datasets/imagenet --pretrained owlite --project TestProject --baseline torchvision_ResNet18 --experiment ResNet18_PTQ --ptq
     ```
 
 3. Run the code for OwLite QAT
@@ -55,7 +53,7 @@ python main.py -a resnet18 --data ~/datasets/imagenet --pretrained --evaluate ow
     ```
     Example:
     ```
-    python main.py -a resnet18 --data ~/datasets/imagenet --pretrained --evaluate owlite --project TestProject --baseline torchvision_ResNet18 --experiment ResNet18_QAT --qat
+    python main.py -a resnet18 --data ~/datasets/imagenet --pretrained owlite --project TestProject --baseline torchvision_ResNet18 --experiment ResNet18_QAT --qat
     ```
 
 ## Results

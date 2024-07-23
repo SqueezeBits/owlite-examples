@@ -13,10 +13,8 @@
     ```
     pip install -r requirements.txt
     ```
-3. install OwLite package
-    ```
-    pip install owlite --extra-index-url https://pypi.squeezebits.com/
-    ```
+3. install OwLite package following the [installation guide](https://squeezebits.gitbook.io/owlite/user-guide/getting-started/install)
+
 4. Apply patch & install transformer package
     ```
     cd transformers
@@ -50,14 +48,6 @@
 
 - Apply OwLite Recommended Config with the following calibration method
     - PTQ calibration: Require to find the optimal calibration method for each node.
-    - QAT backward: CLQ
-    - Hyperparameter setting for QAT
-        - learning_rate:
-            - 5e-6 for STS-B task
-            - 1e-6 for CoLA, MRPC, and MNLI tasks
-        - num_train_epochs:
-            - 10 for CoLA task
-            - 3 for MRPC, STS-B, and MNLI tasks
     
 ### GLUE Accuracy and Latency Results
 TensorRT Evaluation GPU: A6000
@@ -65,7 +55,7 @@ TensorRT Evaluation GPU: A6000
 | Quantization  | Input Size | CoLA (Matthews corr.) | SST-2 | MRPC (Acc./F1) | STS-B (Pearson/Spearman corr.)| QQP (Acc./F1)| MNLI (Matched/Mismatched Acc.) | QNLI  | RTE   | WNLI  | Latency (ms) |  
 | ------------- |:----------:|:---------------------:|:-----:|:--------------:|:-----------------------------:|:------------:|:------------------------------:|:-----:|:-----:|:-----:|:------------:|
 | FP16 TensorRT | (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         | 
-| OwLite INT8   | (8x128)    | 57.33                 | 91.17 | 83.33/88.36    | 87.58/87.33                   | 89.25/86.01  | 83.22/83.41                    | 89.44 | 63.20 | 57.14 | 1.65         |
+| OwLite INT8   | (8x128)    | 57.88                 | 91.51 | 82.84/87.97    | 87.35/87.16                   | 89.33/86.03  | 83.43/83.23                    | 89.74 | 64.68 | 57.14 | 1.65         |
 | INT8 TensorRT*| (8x128)    | 61.13                 | 91.51 | 84.31/89.08    | 87.85/87.60                   | 90.59/87.29  | 83.97/84.45                    | 90.72 | 65.43 | 57.14 | 2.32         |
 
 - The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy). However, the results were the same as those of the FP16 TensorRT engine, as the attempt to build with INT8 failed, leading to fallback to FP16 for all operations. Further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).

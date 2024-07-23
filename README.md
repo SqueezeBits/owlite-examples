@@ -32,6 +32,10 @@
 - [Object detection](object-detection/README.md)
 - [Image segmentation](image-segmentation/README.md)
 - [Text classification](text-classification/README.md)
+- [Re-identification](re-identification/README.md)
+- [Face landmark](face-landmark/README.md)
+- [Pose estimation](pose-estimation/README.md)
+- [Text-to-image](text-to-image/README.md)
 
 List of available tasks will be continuously updated.
 
