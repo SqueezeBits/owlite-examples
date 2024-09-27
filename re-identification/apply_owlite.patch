@@ -91,7 +91,7 @@ index 49f6b69..356df6a 100644
 +with open(result, 'r') as f:
 +    evaluation_results = f.readlines()
 +
-+rank_1 = float(results[-1].split(' ')[0].split(':')[-1])
++rank_1 = float(evaluation_results[-1].split(' ')[0].split(':')[-1])
 +
 +# Log Rank@1 of the model using OwLite
 +owl.log(rank_1=rank_1)

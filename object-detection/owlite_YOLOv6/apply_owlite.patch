@@ -21,7 +21,7 @@ index 92f483d..29c5f28 100644
 +psutil
  # pytorch_quantization>=2.1.1
 diff --git a/tools/eval.py b/tools/eval.py
-index 5543029..69598ff 100644
+index 5543029..430ad58 100644
 --- a/tools/eval.py
 +++ b/tools/eval.py
 @@ -5,6 +5,7 @@ import os
@@ -160,10 +160,26 @@ index bc0fcff..d43de37 100644
          dataset,
      )
 diff --git a/yolov6/layers/common.py b/yolov6/layers/common.py
-index c69d9d0..4d3d8b6 100644
+index c69d9d0..bb0290e 100644
 --- a/yolov6/layers/common.py
 +++ b/yolov6/layers/common.py
-@@ -150,11 +150,9 @@ class CSPSPPFModule(nn.Module):
+@@ -105,11 +105,10 @@ class SPPFModule(nn.Module):
+ 
+     def forward(self, x):
+         x = self.cv1(x)
+-        with warnings.catch_warnings():
+-            warnings.simplefilter('ignore')
+-            y1 = self.m(x)
+-            y2 = self.m(y1)
+-            return self.cv2(torch.cat([x, y1, y2, self.m(y2)], 1))
++
++        y1 = self.m(x)
++        y2 = self.m(y1)
++        return self.cv2(torch.cat([x, y1, y2, self.m(y2)], 1))
+ 
+ 
+ class SimSPPF(nn.Module):
+@@ -150,11 +149,9 @@ class CSPSPPFModule(nn.Module):
      def forward(self, x):
          x1 = self.cv4(self.cv3(self.cv1(x)))
          y0 = self.cv2(x)

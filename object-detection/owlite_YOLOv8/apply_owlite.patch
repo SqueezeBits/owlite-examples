@@ -1,9 +1,9 @@
 diff --git a/main.py b/main.py
 new file mode 100644
-index 00000000..4378365d
+index 00000000..32999041
 --- /dev/null
 +++ b/main.py
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,172 @@
 +import argparse
 +import random
 +import torch
@@ -136,8 +136,9 @@ index 00000000..4378365d
 +    )
 +    yolo.model.to(device)
 +    yolo.model(example_input)
++
 +    owlite_model = owl.convert(yolo.model.eval(), example_input)
-+    
++
 +    # Initialize OwLite YOLO Model
 +    owlite_model.stride = yolo.model.stride.to(device)
 +    owlite_model.names = yolo.model.names
@@ -165,9 +166,9 @@ index 00000000..4378365d
 +    yolo.model = owlite_model
 +
 +    # Benchmark the model using OwLite
++    metrics = yolo.val(data=args.data_cfg, batch=args.batch_size, rect=False)
 +    owl.export(owlite_model)
 +    owl.benchmark()
-+    metrics = yolo.val(data=args.data_cfg, batch=args.batch_size, rect=False)
 +    map50_95_metrics_key = "metrics/mAP50-95(B)" if args.task == "detect" else "metrics/mAP50-95(P)"
 +    owl.log(mAP=metrics.results_dict[map50_95_metrics_key])
 +    return
@@ -176,50 +177,90 @@ index 00000000..4378365d
 +if __name__ == "__main__":
 +    main()
 diff --git a/ultralytics/data/build.py b/ultralytics/data/build.py
-index 1d961aee..e109c4bf 100644
+index df342503..60357bf8 100644
 --- a/ultralytics/data/build.py
 +++ b/ultralytics/data/build.py
-@@ -112,7 +112,8 @@ def build_dataloader(dataset, batch, workers, shuffle=True, rank=-1):
-                               pin_memory=PIN_MEMORY,
-                               collate_fn=getattr(dataset, 'collate_fn', None),
-                               worker_init_fn=seed_worker,
--                              generator=generator)
-+                              generator=generator,
-+                              drop_last=True,)
+@@ -142,6 +142,7 @@ def build_dataloader(dataset, batch, workers, shuffle=True, rank=-1):
+         collate_fn=getattr(dataset, "collate_fn", None),
+         worker_init_fn=seed_worker,
+         generator=generator,
++        drop_last=True,
+     )
  
  
- def check_source(source):
 diff --git a/ultralytics/engine/validator.py b/ultralytics/engine/validator.py
-index cf906d9e..f24f8bec 100644
+index 8a2765c9..c0d664ec 100644
 --- a/ultralytics/engine/validator.py
 +++ b/ultralytics/engine/validator.py
-@@ -150,7 +150,7 @@ class BaseValidator:
+@@ -154,7 +154,7 @@ class BaseValidator:
              self.dataloader = self.dataloader or self.get_dataloader(self.data.get(self.args.split), self.args.batch)
  
              model.eval()
 -            model.warmup(imgsz=(1 if pt else self.args.batch, 3, imgsz, imgsz))  # warmup
 +            model.warmup(imgsz=(self.args.batch, 3, imgsz, imgsz))  # warmup
  
-         self.run_callbacks('on_val_start')
-         dt = Profile(), Profile(), Profile(), Profile()
+         self.run_callbacks("on_val_start")
+         dt = (
 diff --git a/ultralytics/nn/autobackend.py b/ultralytics/nn/autobackend.py
-index 09f982ca..b22e1345 100644
+index cde35a57..4c85be57 100644
 --- a/ultralytics/nn/autobackend.py
 +++ b/ultralytics/nn/autobackend.py
-@@ -83,7 +83,7 @@ class AutoBackend(nn.Module):
-                  dnn=False,
-                  data=None,
-                  fp16=False,
--                 fuse=True,
-+                 fuse=False,
-                  verbose=True):
+@@ -87,7 +87,7 @@ class AutoBackend(nn.Module):
+         data=None,
+         fp16=False,
+         batch=1,
+-        fuse=True,
++        fuse=False,
+         verbose=True,
+     ):
          """
-         Initialize the AutoBackend for inference.
+@@ -453,8 +453,14 @@ class AutoBackend(nn.Module):
+ 
+         # PyTorch
+         if self.pt or self.nn_module:
+-            y = self.model(im, augment=augment, visualize=visualize, embed=embed)
+-
++            kwargs = {}
++            if augment is not None:
++                kwargs['augment'] = augment
++            if visualize is not None:
++                kwargs['visualize'] = visualize
++            if embed is not None:
++                kwargs['augment'] = embed
++            y = self.model(im, **kwargs) if not kwargs else self.model(im)
+         # TorchScript
+         elif self.jit:
+             y = self.model(im)
 diff --git a/ultralytics/nn/modules/block.py b/ultralytics/nn/modules/block.py
-index c754cdfc..9ebf67a5 100644
+index 672f0964..a4707669 100644
 --- a/ultralytics/nn/modules/block.py
 +++ b/ultralytics/nn/modules/block.py
-@@ -200,13 +200,15 @@ class C2f(nn.Module):
+@@ -141,7 +141,8 @@ class HGBlock(nn.Module):
+     def forward(self, x):
+         """Forward pass of a PPHGNetV2 backbone layer."""
+         y = [x]
+-        y.extend(m(y[-1]) for m in self.m)
++        for m in self.m:
++            y.append(m(y[-1]))
+         y = self.ec(self.sc(torch.cat(y, 1)))
+         return y + x if self.add else y
+ 
+@@ -180,10 +181,10 @@ class SPPF(nn.Module):
+ 
+     def forward(self, x):
+         """Forward pass through Ghost Convolution block."""
+-        y = [self.cv1(x)]
+-        y.extend(self.m(y[-1]) for _ in range(3))
+-        return self.cv2(torch.cat(y, 1))
+-
++        x = self.cv1(x)
++        y1 = self.m(x)
++        y2 = self.m(y1)
++        return self.cv2(torch.cat((x, y1, y2, self.m(y2)), 1))
+ 
+ class C1(nn.Module):
+     """CSP Bottleneck with 1 convolution."""
+@@ -236,13 +237,15 @@ class C2f(nn.Module):
      def forward(self, x):
          """Forward pass through C2f layer."""
          y = list(self.cv1(x).chunk(2, 1))
@@ -236,4 +277,23 @@ index c754cdfc..9ebf67a5 100644
 +            y.append(m(y[-1]))
          return self.cv2(torch.cat(y, 1))
  
+ 
+@@ -462,14 +465,16 @@ class C2fAttn(nn.Module):
+     def forward(self, x, guide):
+         """Forward pass through C2f layer."""
+         y = list(self.cv1(x).chunk(2, 1))
+-        y.extend(m(y[-1]) for m in self.m)
++        for m in self.m:
++            y.append(m(y[-1]))
+         y.append(self.attn(y[-1], guide))
+         return self.cv2(torch.cat(y, 1))
+ 
+     def forward_split(self, x, guide):
+         """Forward pass using split() instead of chunk()."""
+         y = list(self.cv1(x).split((self.c, self.c), 1))
+-        y.extend(m(y[-1]) for m in self.m)
++        for m in self.m:
++            y.append(m(y[-1]))
+         y.append(self.attn(y[-1], guide))
+         return self.cv2(torch.cat(y, 1))
  

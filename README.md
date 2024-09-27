@@ -11,8 +11,8 @@
 <p align="center">
   <a href="https://github.com/SqueezeBits/owlite/releases"><img src="https://img.shields.io/github/v/release/SqueezeBits/owlite?color=EE781F" /></a>
   <a href="https://squeezebits.gitbook.io/owlite/quick/readme"><img src="https://img.shields.io/badge/Documentation-FFA32C" /></a>
-  <a href="https://github.com/SqueezeBits/owlite#installation"><img src="https://img.shields.io/badge/python-~=3.10-blue" /></a>
-  <a><img src="https://img.shields.io/badge/pytorch-2.0%20%7C%202.1%20%7C%202.2-blue" /></a>
+  <a href="https://github.com/SqueezeBits/owlite#installation"><img src="https://img.shields.io/badge/python-≥3.10, <3.13-blue" /></a>
+  <a><img src="https://img.shields.io/badge/pytorch-≥2.1.2, <2.5-blue" /></a>
 </p>
 </div>
 
@@ -36,6 +36,7 @@
 - [Face landmark](face-landmark/README.md)
 - [Pose estimation](pose-estimation/README.md)
 - [Text-to-image](text-to-image/README.md)
+- [Text recognition](text-recognition/README.md)
 
 List of available tasks will be continuously updated.
 

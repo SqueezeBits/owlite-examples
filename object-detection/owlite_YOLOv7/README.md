@@ -19,6 +19,8 @@ patch -p1 < ../apply_owlite.patch
     conda create -n <env_name> python=3.10 -y
     conda activate <env_name>
     ```
+    Conda environment can be created with Python versions between 3.10 and 3.12 by replacing ```3.10``` with ```3.11``` or ```3.12```. Compatible Python versions for each PyTorch version can be found in [PyTorch compatibility matrix](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
+
 2. install required packages
     ```
     pip install -r requirements.txt
@@ -59,6 +61,28 @@ TensorRT Evaluation GPU: A6000
 | FP16 TensorRT   | (16, 3, 640, 640) | 50.9              | 69.4         | 27.38            |
 | OwLite INT8 PTQ | (16, 3, 640, 640) | 50.6              | 69.2         | 14.36            |
 | INT8 TensorRT   | (16, 3, 640, 640) | 38.9              | 59.5         | 15.74            |
+
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
+</details>
+
+<details>
+<summary>YOLOv7-X</summary>
+
+### Configuration
+
+#### Quantization Configuration
+
+- Apply OwLite Recommended Config with the following calibration method
+  - PTQ calibration: MSE
+    
+### Accuracy and Latency Results
+TensorRT Evaluation GPU: A6000
+
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | mAP 0.50 (%) | GPU Latency (ms) | 
+| --------------- |:-----------------:|:-----------------:|:------------:|:----------------:|
+| FP16 TensorRT   | (16, 3, 640, 640) | 52.5             | 70.5         | 43.59            |
+| OwLite INT8 PTQ | (16, 3, 640, 640) | 52.2             | 70.4         | 23.83            |
+| INT8 TensorRT   | (16, 3, 640, 640) | 48.1             | 65.3         | 24.08            |
 
 - The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
 </details>

@@ -1,5 +1,5 @@
 # OwLite Object Detection Example 
-- Model: YOLOX-S, YOLOX-M, YOLOX-L, YOLOX-X
+- Model: YOLOX
 - Dataset: COCO'17 Dataset
 
 ## Prerequisites
@@ -19,6 +19,8 @@ patch -p1 < ../apply_owlite.patch
     conda create -n <env_name> python=3.10 -y
     conda activate <env_name>
     ```
+    Conda environment can be created with Python versions between 3.10 and 3.12 by replacing ```3.10``` with ```3.11``` or ```3.12```. Compatible Python versions for each PyTorch version can be found in [PyTorch compatibility matrix](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
+
 2. install required packages
     ```
     pip install -e .
@@ -47,6 +49,27 @@ CUDA_VISIBLE_DEVICES=0 python -m tools.eval -n yolox-s -c yolox_s.pth -b 64 -d 1
     ```
 
 ## Results
+
+<details>
+<summary>YOLOX-Tiny</summary>
+
+### Configuration
+#### Quantization Configuration
+
+- Apply OwLite Recommended Config with the following calibration method
+  - PTQ calibration: MSE
+
+### Accuracy and Latency Results
+TensorRT Evaluation GPU: A6000
+
+| Quantization    | Input Size        | mAP 0.50~0.95 (%) | GPU Latency (ms) |
+| --------------- |:-----------------:|:-----------------:|:----------------:|
+| FP16 TensorRT   | (64, 3, 416, 416) | 32.7              | 11.48            |
+| OwLite INT8 PTQ | (64, 3, 416, 416) | 32.1              | 7.99             |
+| INT8 TensorRT   | (64, 3, 416, 416) | 30.8              | 7.68             |
+
+- The INT8 TensorRT engine was built by applying FP16 and INT8 flags using [Polygraphy](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy), as further explained in [TRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide).
+</details>
 
 <details>
 <summary>YOLOX-S</summary>

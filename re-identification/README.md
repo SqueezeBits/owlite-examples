@@ -5,7 +5,7 @@
 ## Prerequisites
 
 ### Prepare dataset
-Download and prepare [Market1501 Dataset](https://zheng-lab.cecs.anu.edu.au/Project/project_reid.html) referring to the the [Dataset & Preparation](https://github.com/layumi/Person_reID_baseline_pytorch?tab=readme-ov-file#dataset--preparation) from the original repository.
+Download and prepare [Market1501 Dataset](https://drive.google.com/file/d/0B8-rUzbwVRk0c054eEozWG9COHM/view) referring to the the [Dataset & Preparation](https://github.com/layumi/Person_reID_baseline_pytorch?tab=readme-ov-file#dataset--preparation) from the original repository.
 
 ### Apply patch
 ```
@@ -19,6 +19,8 @@ patch -p1 < ../apply_owlite.patch
     conda create -n <env_name> python=3.10 -y
     conda activate <env_name>
     ```
+    Conda environment can be created with Python versions between 3.10 and 3.12 by replacing ```3.10``` with ```3.11``` or ```3.12```. Compatible Python versions for each PyTorch version can be found in [PyTorch compatibility matrix](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
+
 2. install required packages
     ```
     pip install -r requirements.txt

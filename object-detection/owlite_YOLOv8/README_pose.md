@@ -19,9 +19,11 @@ patch -p1 < ../apply_owlite.patch
     conda create -n <env_name> python=3.10 -y
     conda activate <env_name>
     ```
+    Conda environment can be created with Python versions between 3.10 and 3.12 by replacing ```3.10``` with ```3.11``` or ```3.12```. Compatible Python versions for each PyTorch version can be found in [PyTorch compatibility matrix](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
+
 2. install required packages
     ```
-    pip install -r requirements.txt
+    pip install .
     ```
 3. install OwLite package following the [installation guide](https://squeezebits.gitbook.io/owlite/user-guide/getting-started/install)
 

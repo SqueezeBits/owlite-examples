@@ -1,0 +1,401 @@
+diff --git a/create_lmdb_dataset.py b/create_lmdb_dataset.py
+index a58d137..ead4d47 100644
+--- a/create_lmdb_dataset.py
++++ b/create_lmdb_dataset.py
+@@ -1,6 +1,6 @@
+ """ a modified version of CRNN torch repository https://github.com/bgshih/crnn/blob/master/tool/create_dataset.py """
+ 
+-import fire
++import argparse
+ import os
+ import lmdb
+ import cv2
+@@ -44,17 +44,18 @@ def createDataset(inputPath, gtFile, outputPath, checkValid=True):
+ 
+     nSamples = len(datalist)
+     for i in range(nSamples):
+-        imagePath, label = datalist[i].strip('\n').split('\t')
+-        imagePath = os.path.join(inputPath, imagePath)
++        image_end = datalist[i].find(",")
++        imagePath = datalist[i][:image_end].strip("\ufeff")
++        label = datalist[i][image_end+1:].strip('"').strip()        
+ 
+         # # only use alphanumeric data
+         # if re.search('[^a-zA-Z0-9]', label):
+         #     continue
+ 
+-        if not os.path.exists(imagePath):
++        if not os.path.exists(os.path.join(inputPath, imagePath)):
+             print('%s does not exist' % imagePath)
+             continue
+-        with open(imagePath, 'rb') as f:
++        with open(os.path.join(inputPath, imagePath), 'rb') as f:
+             imageBin = f.read()
+         if checkValid:
+             try:
+@@ -84,4 +85,12 @@ def createDataset(inputPath, gtFile, outputPath, checkValid=True):
+ 
+ 
+ if __name__ == '__main__':
+-    fire.Fire(createDataset)
++    parser = argparse.ArgumentParser(description='Argumetns for creating lmbd dataset')
++
++    # for test
++    parser.add_argument('--inputPath', required=True, type=str, help='input dataset path to reformat into lmdb dataset')
++    parser.add_argument('--gtFile', required=True, type=str, help='ground-truth file')
++    parser.add_argument('--outputPath', required=True, type=str, help='output lmdb dataset path')
++    
++    args = parser.parse_args()
++    createDataset(inputPath=args.inputPath, gtFile=args.gtFile, outputPath=args.outputPath)
+diff --git a/dataset.py b/dataset.py
+index e87b2ff..90040b9 100644
+--- a/dataset.py
++++ b/dataset.py
+@@ -76,7 +76,8 @@ class Batch_Balanced_Dataset(object):
+                 _dataset, batch_size=_batch_size,
+                 shuffle=True,
+                 num_workers=int(opt.workers),
+-                collate_fn=_AlignCollate, pin_memory=True)
++                collate_fn=_AlignCollate, pin_memory=True,
++                drop_last=True,)
+             self.data_loader_list.append(_data_loader)
+             self.dataloader_iter_list.append(iter(_data_loader))
+ 
+@@ -96,12 +97,12 @@ class Batch_Balanced_Dataset(object):
+ 
+         for i, data_loader_iter in enumerate(self.dataloader_iter_list):
+             try:
+-                image, text = data_loader_iter.next()
++                image, text = next(data_loader_iter)
+                 balanced_batch_images.append(image)
+                 balanced_batch_texts += text
+             except StopIteration:
+                 self.dataloader_iter_list[i] = iter(self.data_loader_list[i])
+-                image, text = self.dataloader_iter_list[i].next()
++                image, text = next(self.dataloader_iter_list[i])
+                 balanced_batch_images.append(image)
+                 balanced_batch_texts += text
+             except ValueError:
+diff --git a/model.py b/model.py
+index da79967..cf372b1 100755
+--- a/model.py
++++ b/model.py
+@@ -44,7 +44,7 @@ class Model(nn.Module):
+             print('No Transformation module specified')
+ 
+         if opt.Transformer:
+-            self.vitstr= create_vitstr(num_tokens=opt.num_class, model=opt.TransformerModel)
++            self.vitstr = create_vitstr(num_tokens=opt.num_class, model=opt.TransformerModel)
+             return
+ 
+         """ FeatureExtraction """
+@@ -77,13 +77,16 @@ class Model(nn.Module):
+         else:
+             raise Exception('Prediction is neither CTC or Attn')
+ 
+-    def forward(self, input, text, is_train=True, seqlen=25):
++    def forward(self, input, text=None, is_train=True, seqlen=25):
+         """ Transformation stage """
+         if not self.stages['Trans'] == "None":
+             input = self.Transformation(input)
+ 
+         if self.stages['ViTSTR']:
+-            prediction = self.vitstr(input, seqlen=seqlen)
++            if hasattr(self, "batch_max_length"):
++                prediction = self.vitstr(input, seqlen=self.batch_max_length)
++            else:
++                prediction = self.vitstr(input, seqlen=seqlen)
+             return prediction
+ 
+         """ Feature extraction stage """
+@@ -111,6 +114,8 @@ class JitModel(Model):
+         self.vitstr= create_vitstr(num_tokens=opt.num_class, model=opt.TransformerModel)
+ 
+     def forward(self, input, seqlen:int = 25):
++        if hasattr(self, "batch_max_length"):
++            prediction = self.vitstr(input, seqlen=self.batch_max_length)
+         prediction = self.vitstr(input, seqlen=seqlen)
+         return prediction
+ 
+diff --git a/requirements.txt b/requirements.txt
+index bb7c924..98daea2 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,11 +1,14 @@
+-validators==0.18.2
+-torch==1.13.1
+-torchvision==0.14.1
++validators
++torch==2.2.2
++torchvision==0.17.2
+ timm==0.4.5
+-lmdb==1.2.1
++lmdb
+ pillow>=8.3.2
+ nltk>=3.6.4
+-natsort==7.1.0
+-opencv-python==4.5.1.48
+-opencv-contrib-python==4.5.1.48
++natsort
++opencv-python
++opencv-contrib-python
+ wand==0.6.6
++numpy<2
++six
++scikit-image
+diff --git a/test.py b/test.py
+index 2c2e61b..515c7e5 100644
+--- a/test.py
++++ b/test.py
+@@ -33,6 +33,7 @@ from utils import CTCLabelConverter, AttnLabelConverter, Averager, TokenLabelCon
+ from dataset import hierarchical_dataset, AlignCollate
+ from model import Model, JitModel
+ from utils import get_args
++import owlite
+ 
+ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+ 
+@@ -143,7 +144,7 @@ def validation(model, criterion, evaluation_loader, converter, opt):
+             preds_str = converter.decode(preds_index.data, preds_size.data)
+         
+         elif opt.Transformer:
+-            preds = model(image, text=target, seqlen=converter.batch_max_length)
++            preds = model(image)
+             _, preds_index = preds.topk(1, dim=-1, largest=True, sorted=True)
+             preds_index = preds_index.view(-1, converter.batch_max_length)
+             forward_time = time.time() - start_time
+@@ -271,10 +272,17 @@ def test(opt):
+         converter = AttnLabelConverter(opt.character)
+     opt.num_class = len(converter.character)
+     
+-    if opt.rgb:
++    if opt.rgb:  # ViTSTR does not support 3 channel input
+         opt.input_channel = 3
+     model = Model(opt)
+-
++    # init OwLite
++    owl = owlite.init(
++        project=opt.owlite_project, 
++        baseline=opt.owlite_baseline, 
++        experiment=opt.owlite_experiment, 
++        duplicate_from=opt.owlite_duplicate_from
++    )
++    
+     print('model input parameters', opt.imgH, opt.imgW, opt.num_fiducial, opt.input_channel, opt.output_channel,
+           opt.hidden_size, opt.num_class, opt.batch_max_length, opt.Transformation, opt.FeatureExtraction,
+           opt.SequenceModeling, opt.Prediction)
+@@ -289,6 +297,14 @@ def test(opt):
+         model.load_state_dict(torch.load(opt.saved_model, map_location=device))
+     opt.exp_name = '_'.join(opt.saved_model.split('/')[1:])
+     # print(model)
++    
++    # Run OwLite convert
++    model.module.batch_max_length = converter.batch_max_length
++    example_image = torch.randn(opt.batch_size // max(1, opt.num_gpu), 1, 224, 224).to(device)
++    example_kwargs = {
++        "input": example_image,
++    }
++    model.module = owl.convert(model.module.eval(), **example_kwargs)
+ 
+     if opt.infer_model is not None:
+         get_infer_model(model, opt)
+@@ -318,12 +334,23 @@ def test(opt):
+                 eval_data, batch_size=opt.batch_size,
+                 shuffle=False,
+                 num_workers=int(opt.workers),
+-                collate_fn=AlignCollate_evaluation, pin_memory=True)
++                collate_fn=AlignCollate_evaluation, pin_memory=True,
++                drop_last=True,)
++            if opt.owlite_ptq: 
++                with owlite.calibrate(model) as calibrate_model:
++                    for i, (image_tensors, labels) in enumerate(evaluation_loader):
++                        image = image_tensors.to(device)
++                        if i > 0 and i >= opt.owlite_calib_num // opt.batch_size:
++                            break
++                        calibrate_model(input=image)
++            owl.export(model.module)
++            owl.benchmark()
+             _, accuracy_by_best_model, _, _, _, _, _, _ = validation(
+                 model, criterion, evaluation_loader, converter, opt)
+             log.write(eval_data_log)
+             print(f'{accuracy_by_best_model:0.3f}')
+             log.write(f'{accuracy_by_best_model:0.3f}\n')
++            owl.log(accuracy=accuracy_by_best_model)
+             log.close()
+ 
+ # https://github.com/clovaai/deep-text-recognition-benchmark/issues/125
+diff --git a/train.py b/train.py
+index bb3261c..7a171d7 100644
+--- a/train.py
++++ b/train.py
+@@ -18,6 +18,7 @@ from dataset import hierarchical_dataset, AlignCollate, Batch_Balanced_Dataset
+ from model import Model
+ from test import validation
+ from utils import get_args
++import owlite
+ 
+ from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, MultiStepLR, ReduceLROnPlateau
+ 
+@@ -48,7 +49,8 @@ def train(opt):
+         valid_dataset, batch_size=opt.batch_size,
+         shuffle=True,  # 'True' to check training progress with validation function.
+         num_workers=int(opt.workers),
+-        collate_fn=AlignCollate_valid, pin_memory=True)
++        collate_fn=AlignCollate_valid, pin_memory=True,
++        drop_last=True,)
+     log.write(valid_dataset_log)
+     print('-' * 80)
+     log.write('-' * 80 + '\n')
+@@ -70,6 +72,13 @@ def train(opt):
+         opt.input_channel = 3
+ 
+     model = Model(opt)
++    # init OwLite
++    owl = owlite.init(
++        project=opt.owlite_project, 
++        baseline=opt.owlite_baseline, 
++        experiment=opt.owlite_experiment, 
++        duplicate_from=opt.owlite_duplicate_from
++    )
+ 
+     # weight initialization
+     if not opt.Transformer:
+@@ -98,6 +107,23 @@ def train(opt):
+             model.load_state_dict(torch.load(opt.saved_model))
+     #print("Model:")
+     #print(model)
++    # Run OwLite convert
++    model.module.batch_max_length = converter.batch_max_length
++    example_image = torch.randn(opt.batch_size // max(1, opt.num_gpu), 1, 224, 224).to(device)
++    example_kwargs = {
++        "input": example_image,
++    }
++    model.module = owl.convert(model.module.eval(), **example_kwargs)
++    
++    idx = 0
++    max_calib_range = min(opt.owlite_calib_num, len(train_dataset.data_loader_list[0].dataset))
++    if opt.owlite_qat: 
++        with owlite.calibrate(model) as calibrate_model:
++            for _ in range(max(1, (max_calib_range+opt.batch_size-1)//opt.batch_size)):
++                image_tensors, labels = train_dataset.get_batch()
++                image = image_tensors.to(device)
++                idx += 1
++                calibrate_model(input=image)
+ 
+     """ setup loss """
+     # README: https://github.com/clovaai/deep-text-recognition-benchmark/pull/209
+@@ -180,7 +206,7 @@ def train(opt):
+                 cost = criterion(preds, text, preds_size, length)
+         elif opt.Transformer:
+             target = converter.encode(labels)
+-            preds = model(image, text=target, seqlen=converter.batch_max_length)
++            preds = model(image)
+             cost = criterion(preds.view(-1, preds.shape[-1]), target.contiguous().view(-1))
+         else:
+             preds = model(image, text[:, :-1])  # align with Attention.forward
+@@ -256,6 +282,16 @@ def train(opt):
+ 
+         if (iteration + 1) == opt.num_iter:
+             print('end the training')
++            torch.save(
++                model.state_dict(), f'./saved_models/{opt.exp_name}/iter_{iteration+1}.pth')
++            owl.export(model.module)
++            owl.benchmark()
++            print('\nFinal result')
++            with open(f'./saved_models/{opt.exp_name}/log_train.txt', 'a') as log:
++                best_model_log = f'{"Best_accuracy":17s}: {best_accuracy:0.3f}, {"Best_norm_ED":17s}: {best_norm_ED:0.2f}'
++                print(best_model_log)
++                log.write('Final result\n' + best_model_log + '\n')
++                owl.log(accuracy=best_accuracy)
+             sys.exit()
+         iteration += 1
+         if scheduler is not None:
+diff --git a/utils.py b/utils.py
+index 40a5fb1..4da28c3 100644
+--- a/utils.py
++++ b/utils.py
+@@ -243,31 +243,31 @@ def get_args(is_train=True):
+     parser.add_argument('--exp_name', help='Where to store logs and models')
+     parser.add_argument('--train_data', required=is_train, help='path to training dataset')
+     parser.add_argument('--valid_data', required=is_train, help='path to validation dataset')
+-    parser.add_argument('--manualSeed', type=int, default=1111, help='for random seed setting')
++    parser.add_argument('--manualSeed', type=int, default=42, help='for random seed setting')
+     parser.add_argument('--workers', type=int, help='number of data loading workers. Use -1 to use all cores.', default=4)
+-    parser.add_argument('--batch_size', type=int, default=192, help='input batch size')
+-    parser.add_argument('--num_iter', type=int, default=300000, help='number of iterations to train for')
+-    parser.add_argument('--valInterval', type=int, default=2000, help='Interval between each validation')
++    parser.add_argument('--batch_size', type=int, default=128, help='input batch size')
++    parser.add_argument('--num_iter', type=int, default=100, help='number of iterations to train for')
++    parser.add_argument('--valInterval', type=int, default=1, help='Interval between each validation')
+     parser.add_argument('--saved_model', default='', help="path to model to continue training")
+     parser.add_argument('--FT', action='store_true', help='whether to do fine-tuning')
+     parser.add_argument('--sgd', action='store_true', help='Whether to use SGD (default is Adadelta)')
+     parser.add_argument('--adam', action='store_true', help='Whether to use adam (default is Adadelta)')
+-    parser.add_argument('--lr', type=float, default=1, help='learning rate, default=1.0 for Adadelta')
++    parser.add_argument('--lr', type=float, default=2.5e-4, help='learning rate, default=1.0 for Adadelta')
+     parser.add_argument('--beta1', type=float, default=0.9, help='beta1 for adam. default=0.9')
+     parser.add_argument('--rho', type=float, default=0.95, help='decay rate rho for Adadelta. default=0.95')
+     parser.add_argument('--eps', type=float, default=1e-8, help='eps for Adadelta. default=1e-8')
+     parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping value. default=5')
+     parser.add_argument('--baiduCTC', action='store_true', help='for data_filtering_off mode')
+     """ Data processing """
+-    parser.add_argument('--select_data', type=str, default='MJ-ST',
+-                        help='select training data (default is MJ-ST, which means MJ and ST used as training data)')
+-    parser.add_argument('--batch_ratio', type=str, default='0.5-0.5',
++    parser.add_argument('--select_data', type=str, default='/',
++                        help='select training data (default is "/", which means data path in determined by train_data is used for training data)')
++    parser.add_argument('--batch_ratio', type=str, default='1',
+                         help='assign ratio for each selected data in the batch')
+     parser.add_argument('--total_data_usage_ratio', type=str, default='1.0',
+                         help='total data usage ratio, this ratio is multiplied to total number of data.')
+     parser.add_argument('--batch_max_length', type=int, default=25, help='maximum-label-length')
+-    parser.add_argument('--imgH', type=int, default=32, help='the height of the input image')
+-    parser.add_argument('--imgW', type=int, default=100, help='the width of the input image')
++    parser.add_argument('--imgH', type=int, default=224, help='the height of the input image')
++    parser.add_argument('--imgW', type=int, default=224, help='the width of the input image')
+     parser.add_argument('--rgb', action='store_true', help='use rgb input')
+     parser.add_argument('--character', type=str,
+                         default='0123456789abcdefghijklmnopqrstuvwxyz', help='character label')
+@@ -280,11 +280,11 @@ def get_args(is_train=True):
+ 
+     choices = ["vitstr_tiny_patch16_224", "vitstr_small_patch16_224", "vitstr_base_patch16_224", "vitstr_tiny_distilled_patch16_224", "vitstr_small_distilled_patch16_224"]
+     parser.add_argument('--TransformerModel', default=choices[0], help='Which vit/deit transformer model', choices=choices)
+-    parser.add_argument('--Transformation', type=str, required=True, help='Transformation stage. None|TPS')
+-    parser.add_argument('--FeatureExtraction', type=str, required=True,
++    parser.add_argument('--Transformation', type=str, default="None", help='Transformation stage. None|TPS')
++    parser.add_argument('--FeatureExtraction', type=str, default="None",
+                         help='FeatureExtraction stage. VGG|RCNN|ResNet')
+-    parser.add_argument('--SequenceModeling', type=str, required=True, help='SequenceModeling stage. None|BiLSTM')
+-    parser.add_argument('--Prediction', type=str, required=True, help='Prediction stage. None|CTC|Attn')
++    parser.add_argument('--SequenceModeling', type=str, default="None", help='SequenceModeling stage. None|BiLSTM')
++    parser.add_argument('--Prediction', type=str, default="None", help='Prediction stage. None|CTC|Attn')
+     parser.add_argument('--num_fiducial', type=int, default=20, help='number of fiducial points of TPS-STN')
+     parser.add_argument('--input_channel', type=int, default=1,
+                         help='the number of input channel of Feature extractor')
+@@ -326,5 +326,26 @@ def get_args(is_train=True):
+                         default=None, help='generate inference jit model')
+     parser.add_argument('--quantized', action='store_true', help='Model quantization')
+     parser.add_argument('--static', action='store_true', help='Static model quantization')
++    
++    # Add OwLite arguments
++    subparsers = parser.add_subparsers(required=True)
++    owlite_parser = subparsers.add_parser("owlite", help="Owlite arguments")
++    owlite_parser.add_argument('--project', type=str, required=True, 
++                            dest="owlite_project", help="Owlite project name")
++    owlite_parser.add_argument('--baseline', type=str, required=True, 
++                            dest="owlite_baseline", help="Owlite baseline name")
++    owlite_parser.add_argument('--experiment', type=str, default=None, 
++                            dest="owlite_experiment", help="Owlite experiment name")
++    owlite_parser.add_argument('--duplicate-from', type=str, default=None, 
++                            dest="owlite_duplicate_from", 
++                            help="The name of Owlite experiment "
++                                    "where the config to be duplicated is located")
++    owlite_parser.add_argument('--ptq', action="store_true", 
++                            dest="owlite_ptq", help="True if Owlite PTQ is applied")
++    owlite_parser.add_argument('--qat', action="store_true", 
++                            dest="owlite_qat", help="True if Owlite QAT is applied")
++    owlite_parser.add_argument('--calib-num', type=int, default=256, 
++                            dest="owlite_calib_num", 
++                            help="Number of data to use for Owlite calibration")
+     args = parser.parse_args()
+     return args

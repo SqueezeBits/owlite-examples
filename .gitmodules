@@ -29,3 +29,6 @@
 [submodule "image-segmentation/owlite_segment_anything/segment-anything"]
 	path = image-segmentation/owlite_segment_anything/segment-anything
 	url = https://github.com/facebookresearch/segment-anything
+[submodule "text-recognition/ViTSTR"]
+	path = text-recognition/ViTSTR
+	url = https://github.com/roatienza/deep-text-recognition-benchmark.git
