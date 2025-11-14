@@ -1,5 +1,5 @@
 diff --git a/main.py b/main.py
-index 129edae..5a308cf 100644
+index 129edae..fe9b68b 100644
 --- a/main.py
 +++ b/main.py
 @@ -5,6 +5,7 @@ import os
@@ -113,9 +113,12 @@ index 129edae..5a308cf 100644
  
      # Set up criterion
      # criterion = utils.get_loss(opts.loss_type)
-@@ -292,7 +310,6 @@ def main():
+@@ -290,9 +308,8 @@ def main():
+     cur_epochs = 0
+     if opts.ckpt is not None and os.path.isfile(opts.ckpt):
          # https://github.com/VainF/DeepLabV3Plus-Pytorch/issues/8#issuecomment-605601402, @PytaichukBohdan
-         checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
+-        checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'))
++        checkpoint = torch.load(opts.ckpt, map_location=torch.device('cpu'), weights_only=False)
          model.load_state_dict(checkpoint["model_state"])
 -        model = nn.DataParallel(model)
          model.to(device)
@@ -139,7 +142,7 @@ index 129edae..5a308cf 100644
 +
 +    model.eval()
 +    batch_size = opts.batch_size
-+    random_input = torch.randn(batch_size, 3, opts.crop_size, opts.crop_size, dtype=torch.float)
++    random_input = torch.randn(batch_size, 3, opts.crop_size, opts.crop_size, dtype=torch.float, device=device)
 +    model = owl.convert(model, random_input)
 +
 +    if opts.owlite_ptq or opts.owlite_qat:

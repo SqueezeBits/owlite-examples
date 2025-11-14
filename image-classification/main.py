@@ -98,6 +98,9 @@ owlite_parser.add_argument('--duplicate-from', type=str, default=None,
                            dest="owlite_duplicate_from", 
                            help="The name of Owlite experiment "
                                 "where the config to be duplicated is located")
+owlite_parser.add_argument('--qnn-device', type=str, default=None, 
+                           dest='qnn_device',
+                           help='QNN device name. Use this option only when a QNN device is connected.')
 owlite_parser.add_argument('--ptq', action="store_true", 
                            dest="owlite_ptq", help="True if Owlite PTQ is applied")
 owlite_parser.add_argument('--qat', action="store_true", 
@@ -119,7 +122,8 @@ def main():
         project=args.owlite_project, 
         baseline=args.owlite_baseline, 
         experiment=args.owlite_experiment, 
-        duplicate_from=args.owlite_duplicate_from
+        duplicate_from=args.owlite_duplicate_from,
+        device=args.qnn_device
     )
 
     if args.seed is not None:
@@ -360,7 +364,7 @@ def main_worker(gpu, ngpus_per_node, args, owl):
                 'optimizer' : optimizer.state_dict(),
                 'scheduler' : scheduler.state_dict()
             }, is_best)
-    
+
     model.load_state_dict(torch.load('model_best.pth.tar')['state_dict'])
     # Benchmark the model using OwLite
     if isinstance(model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):

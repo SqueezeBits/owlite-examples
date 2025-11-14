@@ -31,7 +31,7 @@ Download ImageNet dataset referring to the [README](https://github.com/pytorch/e
 
 ### Run baseline model
 ```
-python main.py -a <model_name> --data <dataset_dir> --pretrained --evaluate owlite --project <owlite_project_name> --baseline <owlite_baseline_name>
+python main.py -a <model_name> --data <dataset_dir> --pretrained --evaluate owlite --project <owlite_project_name> --baseline <owlite_baseline_name> -qnn-device <target_qnn_device_name>
 ```
 #### Example:
 ```
@@ -59,6 +59,8 @@ python main.py -a resnet18 --data ~/datasets/imagenet --pretrained --evaluate ow
     ```
 
 ## Results
+
+### TensorRT
 
 <details>
 <summary>ResNet-18</summary>
@@ -340,3 +342,34 @@ TensorRT Evaluation GPU: A6000
 
 ## Reference
 https://github.com/pytorch/examples/blob/main/imagenet/main.py
+</details>
+
+### Qualcomm Neural Engine
+<details>
+<summary>ViT-B-16</summary>
+
+### Configuration
+
+#### Quantization Configuration
+
+- Apply OwLite Recommended Config with the following calibration method
+  - PTQ calibration: MSE
+  - QAT backward: CLQ
+  - Gradient scales for weight quantization in {Conv, Gemm, Matmul} were set to 0.01
+
+#### Training Configuration
+
+- Learning Rate: 5e-6
+- Weight Decay: 1e-5
+- Epochs: 1
+
+### Accuracy & Latency Results
+QNN Evaluation: Samsung Galaxy S24 Ultra
+
+| Quantization    | Input Size        | Top 1 Acc (%) | Top 5 Acc (%) | Latency (ms) |  
+| --------------- |:-----------------:|:-------------:|:-------------:|:------------:|
+| FP16 QNN        | (1, 3, 224, 224)  | 81.10         | 95.32         |  9.32        |
+| OwLite INT8 PTQ | (1, 3, 224, 224)  | 78.30         | 94.06         |  6.90        |
+| OwLite INT8 QAT | (1, 3, 224, 224)  | 80.15         | 94.92         |  6.90        |
+
+</details>

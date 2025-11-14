@@ -191,7 +191,7 @@ index 0000000..8ee89dc
 +                args.owlite_experiment,
 +                args.owlite_duplicate_from)
 +
-+image_encoder = owl.convert(sam.image_encoder.eval(), torch.randn((1, 3, args.imgsz, args.imgsz)))
++image_encoder = owl.convert(sam.image_encoder.eval(), torch.randn((1, 3, args.imgsz, args.imgsz), device=device))
 +
 +if args.owlite_ptq:
 +    data_transforms = transforms.Compose([

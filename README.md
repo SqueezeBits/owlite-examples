@@ -18,7 +18,7 @@
 
 # OwLite Examples
 
-```OwLite Examples``` repository offers illustrative example codes to help users seamlessly compress PyTorch deep learning models and transform them into TensorRT engines. This is achieved through the OwLite package, which requires only slight modification to current codebases. Most of the examples are based on other public repositories to show how easy it is to apply OwLite compression on the existing codes. You can also check the powerful results of OwLite compression, as demonstrated by numerous examples.
+```OwLite Examples``` repository offers illustrative example codes to help users seamlessly compress PyTorch deep learning models and transform them into TensorRT engines. This is achieved through the OwLite package, which requires only slight modification to current codebases. Most of the examples are based on other public repositories to show how easy it is to apply OwLite compression on the existing codes. You can also check the powerful results of OwLite compression, as demonstrated by numerous examples. 
 
 ## Environment setup
 

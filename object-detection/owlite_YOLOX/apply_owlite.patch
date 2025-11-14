@@ -1,5 +1,5 @@
 diff --git a/requirements.txt b/requirements.txt
-index 80f6d17..cbae374 100644
+index 80f6d17..cddb58a 100644
 --- a/requirements.txt
 +++ b/requirements.txt
 @@ -15,4 +15,4 @@ tensorboard
@@ -7,9 +7,9 @@ index 80f6d17..cbae374 100644
  pycocotools>=2.0.2
  onnx>=1.13.0
 -onnx-simplifier==0.4.10
-+onnx-simplifier>=0.4.10
++onnxsim>=0.4.10
 diff --git a/tools/eval.py b/tools/eval.py
-index 83ad76b..f2df027 100644
+index 83ad76b..58fed2f 100644
 --- a/tools/eval.py
 +++ b/tools/eval.py
 @@ -22,13 +22,60 @@ from yolox.utils import (
@@ -92,7 +92,7 @@ index 83ad76b..f2df027 100644
 +    strides = model.head.strides
 +    # run OwLite convert
 +    with torch.no_grad():
-+        dummy_input = torch.randn(args.batch_size, 3, *exp.input_size)
++        dummy_input = torch.randn(args.batch_size, 3, *exp.input_size).cuda()
 +        model = owl.convert(model, dummy_input)
 + 
 +    if args.owlite_ptq:
@@ -198,7 +198,7 @@ index d57f420..7fff688 100644
          help="resume training start epoch",
      )
 diff --git a/yolox/core/trainer.py b/yolox/core/trainer.py
-index a764426..09d1ebd 100644
+index a764426..6a3b3ac 100644
 --- a/yolox/core/trainer.py
 +++ b/yolox/core/trainer.py
 @@ -32,6 +32,9 @@ from yolox.utils import (
@@ -239,7 +239,7 @@ index a764426..09d1ebd 100644
 +            
 +            # run OwLite convert
 +            with torch.no_grad():
-+                dummy_input = torch.randn(self.args.batch_size, 3, *self.exp.input_size)
++                dummy_input = torch.randn(self.args.batch_size, 3, *self.exp.input_size).to(self.device)
 +                model = self.owl.convert(model, dummy_input)
 +
 +            # calibrate the model with OwLite
