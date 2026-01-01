@@ -1,0 +1,13 @@
+services:
+  owlite:
+    build: 
+      context: .
+      args:
+        USER_ID: ${UUID}
+        GROUP_ID: ${UGID}
+    runtime: nvidia
+    ipc: host
+    volumes:
+     - ./:/workspace
+     - ~/.cache:/home/owlet/.cache
+    

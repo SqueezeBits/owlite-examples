@@ -1,0 +1,2 @@
+#!/bin/bash
+UUID="$(id -u)" UGID="$(id -g)" docker compose run --rm owlite

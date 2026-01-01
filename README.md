@@ -20,14 +20,33 @@
 
 ```OwLite Examples``` repository offers illustrative example codes to help users seamlessly compress PyTorch deep learning models and transform them into TensorRT engines. This is achieved through the OwLite package, which requires only slight modification to current codebases. Most of the examples are based on other public repositories to show how easy it is to apply OwLite compression on the existing codes. You can also check the powerful results of OwLite compression, as demonstrated by numerous examples. 
 
-## Environment setup
+## Getting Started
 
-    git clone https://github.com/SqueezeBits/owlite-examples.git
-    git submodule init
-    git submodule update --recursive 
-    pip install -r requirements.txt
+First clone this repository and it's included submodules.
 
-## Available tasks
+    git clone --recurse-submodules https://github.com/SqueezeBits/owlite-examples.git
+
+Start up a docker instance using the provided `compose.yaml`.
+
+	./start_owlite
+
+Log into Owlite. An account can be created at [owlite.ai](https://owlite.ai/auth/register).
+
+	owlite login
+
+	Enter your email: user@owlite.ai
+	Enter yout password:
+
+After successful login, the following message will be displayed.
+		
+	OwLite [INFO] Logged in as <user>
+	OwLite [INFO] Your price plan: <PLAN TYPE>
+	OwLite [INFO] Your workgroup: <workgroup>
+	OwLite [INFO] Your authentication token is saved at /home/owlet/.cache/owlite/tokens
+
+Head over to the [introduction](introduction/README.md) to begin using OwLite with ResNet18.
+
+## Available Tasks
 - [Image classification](image-classification/README.md)
 - [Object detection](object-detection/README.md)
 - [Image segmentation](image-segmentation/README.md)
